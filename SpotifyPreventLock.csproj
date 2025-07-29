@@ -10,24 +10,21 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
-    <!-- Optimize for transparency support -->
-    <HighEntropyVA>true</HighEntropyVA>
-    <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
+    <!-- Remove WindowsSDKVersion as it may cause conflicts -->
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
     
-    <!-- Use Embedded Resource instead of None for better transparency handling -->
-    <EmbeddedResource Include="app.ico">
-      <LogicalName>$(AssemblyName).app.ico</LogicalName>
-    </EmbeddedResource>
+    <!-- Revert to None instead of EmbeddedResource -->
+    <None Include="app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DebugType>none</DebugType>
-    <!-- Enable icon transparency in release -->
-    <Win32Resource>app.ico</Win32Resource>
+    <!-- Remove Win32Resource to prevent build errors -->
   </PropertyGroup>
 </Project>
