@@ -5,8 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon>app.ico</ApplicationIcon>
-    <Win32Resource>$(IntermediateOutputPath)app.res</Win32Resource>
+    <ApplicationIcon>transparent_spotify.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -16,14 +15,4 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
   </ItemGroup>
-
-  <Target Name="CompileIcon" BeforeTargets="CoreCompile">
-    <!-- First try with RC.exe -->
-    <Exec Command="rc.exe /fo "$(IntermediateOutputPath)app.res" app.rc" 
-          Condition="Exists('app.rc') And Exists('$(MSBuildBinPath)\rc.exe')" />
-    
-    <!-- Fallback for CI/CD environments -->
-    <Exec Command="dotnet winresizer $(MSBuildProjectDirectory)\app.ico /out:$(IntermediateOutputPath)app.res"
-          Condition="!Exists('$(MSBuildBinPath)\rc.exe')" />
-  </Target>
 </Project>
