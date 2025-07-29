@@ -16,3 +16,8 @@
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
   </ItemGroup>
 </Project>
+
+<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Exec Command="magick convert app.ico -define icon:auto-resize -alpha on compiled.ico" />
+  <Exec Command="ResHacker.exe -addoverwrite $(TargetPath), $(TargetPath), compiled.ico, ICONGROUP,MAINICON," />
+</Target>
