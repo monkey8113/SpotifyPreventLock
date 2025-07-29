@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Management;
-using AudioEndPointController;
+using System.Diagnostics;
 
 namespace SpotifyPreventLock
 {
@@ -28,14 +28,11 @@ namespace SpotifyPreventLock
         // ==== App Settings ====
         private NotifyIcon trayIcon;
         private bool isRunning = true;
-        private int checkInterval = 5000;
+        private int checkInterval = 5000; // Default 5 seconds
         private DateTime lastCheckTime = DateTime.MinValue;
-        private readonly IAudioController audioController;
 
         public PreventLockApp()
         {
-            audioController = new AudioController();
-            
             // ==== Tray Icon Setup ====
             trayIcon = new NotifyIcon()
             {
@@ -45,6 +42,7 @@ namespace SpotifyPreventLock
                 ContextMenuStrip = CreateContextMenu()
             };
 
+            // ==== Start Worker Thread ====
             new Thread(WorkerThread) { IsBackground = true }.Start();
         }
 
@@ -117,7 +115,7 @@ namespace SpotifyPreventLock
                 if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= checkInterval)
                 {
                     lastCheckTime = DateTime.Now;
-                    bool isPlaying = IsMediaPlaying();
+                    bool isPlaying = IsSpotifyActive();
 
                     SetThreadExecutionState(isPlaying 
                         ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
@@ -134,33 +132,24 @@ namespace SpotifyPreventLock
             }
         }
 
-        private bool IsMediaPlaying()
+        private bool IsSpotifyActive()
         {
             try
             {
-                // Check if any audio is playing through the default device
-                foreach (var device in audioController.GetPlaybackDevices())
+                // Check if Spotify window has audio focus (simplified approach)
+                foreach (Process proc in Process.GetProcessesByName("Spotify"))
                 {
-                    if (device.IsDefault && device.AudioMeterInformation.MasterPeakValue > 0.01f)
+                    if (proc.MainWindowTitle != "" && !proc.MainWindowTitle.Contains("Spotify"))
                     {
-                        return true;
+                        return true; // Spotify is playing music
                     }
                 }
                 return false;
             }
             catch
             {
-                // Fallback to process check if audio API fails
-                return IsProcessRunning("Spotify");
+                return false;
             }
-        }
-
-        private bool IsProcessRunning(string processName)
-        {
-            var query = $"SELECT Name FROM Win32_Process WHERE Name = '{processName}.exe'";
-            using var searcher = new ManagementObjectSearcher(query);
-            using var results = searcher.Get();
-            return results.Count > 0;
         }
 
         private Icon CreateColoredIcon(Color color)
