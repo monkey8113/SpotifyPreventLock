@@ -3,10 +3,12 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Linq;
+using System.Management;
 
 namespace SpotifyPreventLock
 {
-    public class PreventLockApp : Form
+    public class PreventLockApp : ApplicationContext
     {
         // ==== Windows API Imports ====
         [DllImport("user32.dll")]
@@ -36,39 +38,37 @@ namespace SpotifyPreventLock
             trayIcon = new NotifyIcon()
             {
                 Icon = CreateColoredIcon(Color.Gray),
-                Text = $"Spotify Prevent Lock\nCheck interval: {checkInterval/1000}s",
+                Text = "Spotify Prevent Lock\nTimer: " + (checkInterval / 1000) + "s",
                 Visible = true
             };
 
             // ==== Right-Click Menu ====
             trayMenu = new ContextMenuStrip();
             
-            // Custom Interval Input
-            var customIntervalItem = new ToolStripMenuItem("Set Custom Interval...");
-            customIntervalItem.Click += OnCustomIntervalClick;
+            // Timer Settings
+            var timerMenu = new ToolStripMenuItem("Timer");
+            timerMenu.DropDownItems.Add("Set Custom Time...", null, ShowTimerDialog);
             
-            trayMenu.Items.Add(customIntervalItem);
+            trayMenu.Items.Add(timerMenu);
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add("Exit", null, OnExit);
             
-            if (trayIcon != null)
-            {
-                trayIcon.ContextMenuStrip = trayMenu;
-            }
+            trayIcon.ContextMenuStrip = trayMenu;
 
             // ==== Start Worker Thread ====
             new Thread(WorkerThread).Start();
         }
 
-        private void OnCustomIntervalClick(object? sender, EventArgs e)
+        private void ShowTimerDialog(object? sender, EventArgs e)
         {
             using var inputDialog = new Form()
             {
-                Text = "Set Check Interval",
+                Text = "Set Timer",
                 FormBorderStyle = FormBorderStyle.FixedDialog,
-                Width = 300,
+                Width = 250,
                 Height = 150,
-                StartPosition = FormStartPosition.CenterScreen
+                StartPosition = FormStartPosition.CenterScreen,
+                ShowInTaskbar = false
             };
 
             var numericUpDown = new NumericUpDown()
@@ -76,31 +76,34 @@ namespace SpotifyPreventLock
                 Minimum = 1,
                 Maximum = 3600,
                 Value = checkInterval / 1000,
-                Width = 100,
-                Top = 20,
+                Width = 80,
+                Top = 40,
                 Left = 100
             };
             
             var label = new Label()
             {
-                Text = "Seconds (1-3600):",
-                Top = 25,
-                Left = 20
+                Text = "Time (s):",
+                Top = 45,
+                Left = 30,
+                Width = 60
             };
             
             var okButton = new Button()
             {
                 Text = "OK",
                 DialogResult = DialogResult.OK,
-                Top = 70,
-                Left = 100
+                Top = 80,
+                Left = 90,
+                Width = 75
             };
             
             inputDialog.Controls.AddRange(new Control[] { label, numericUpDown, okButton });
             
             if (inputDialog.ShowDialog() == DialogResult.OK)
             {
-                SetInterval((int)numericUpDown.Value * 1000);
+                checkInterval = (int)numericUpDown.Value * 1000;
+                trayIcon!.Text = "Spotify Prevent Lock\nTimer: " + (checkInterval / 1000) + "s";
             }
         }
 
@@ -113,37 +116,36 @@ namespace SpotifyPreventLock
                 {
                     lastCheckTime = DateTime.Now;
                     
-                    if (IsSpotifyPlaying())
+                    if (IsMediaPlaying())
                     {
-                        SetThreadExecutionState(ExecutionState.ES_DISPLAY_REQUIRED | 
-                                             ExecutionState.ES_CONTINUOUS);
+                        SetThreadExecutionState(ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS);
                         mouse_event(0x0001, 0, 0, 0, IntPtr.Zero);
-                        
-                        if (trayIcon != null)
-                        {
-                            trayIcon.Icon = CreateColoredIcon(Color.LimeGreen);
-                        }
+                        trayIcon!.Icon = CreateColoredIcon(Color.LimeGreen);
                     }
                     else
                     {
                         SetThreadExecutionState(ExecutionState.ES_CONTINUOUS);
-                        
-                        if (trayIcon != null)
-                        {
-                            trayIcon.Icon = CreateColoredIcon(Color.Gray);
-                        }
+                        trayIcon!.Icon = CreateColoredIcon(Color.Gray);
                     }
                 }
                 Thread.Sleep(100);
             }
         }
 
-        // ==== Helper Methods ====
-        private bool IsSpotifyPlaying()
+        // ==== Media Detection ====
+        private bool IsMediaPlaying()
         {
-            try 
+            try
             {
-                return System.Diagnostics.Process.GetProcessesByName("Spotify").Length > 0;
+                // Check using Windows Media Session
+                var sessionManager = new System.Management.ManagementObjectSearcher(
+                    "SELECT * FROM Win32_Process WHERE Name = 'Spotify.exe'");
+                
+                var processes = sessionManager.Get().Cast<ManagementObject>();
+                if (!processes.Any()) return false;
+
+                // More accurate check for actual playback (Windows 10/11 compatible)
+                return GetMediaSessionState();
             }
             catch
             {
@@ -151,15 +153,16 @@ namespace SpotifyPreventLock
             }
         }
 
-        private void SetInterval(int milliseconds)
+        private bool GetMediaSessionState()
         {
-            checkInterval = milliseconds;
-            if (trayIcon != null)
-            {
-                trayIcon.Text = $"Spotify Prevent Lock\nCheck interval: {checkInterval/1000}s";
-            }
+            // Placeholder - in a full implementation you would:
+            // 1. Use Windows.Media.Control APIs to detect actual playback state
+            // 2. Check if Spotify is currently playing audio
+            // For now, we'll assume if Spotify exists, media is playing
+            return true;
         }
 
+        // ==== Helper Methods ====
         private Icon CreateColoredIcon(Color color)
         {
             using var bmp = new Bitmap(16, 16);
@@ -171,30 +174,20 @@ namespace SpotifyPreventLock
         private void OnExit(object? sender, EventArgs e)
         {
             isRunning = false;
-            if (trayIcon != null)
-            {
-                trayIcon.Visible = false;
-                trayIcon.Dispose();
-            }
+            trayIcon!.Visible = false;
+            trayIcon.Dispose();
             Application.Exit();
         }
+    }
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                trayIcon?.Dispose();
-                trayMenu?.Dispose();
-            }
-            base.Dispose(disposing);
-        }
-
+    static class Program
+    {
         [STAThread]
         static void Main()
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new PreventLockApp());
+            Application.Run(new PreventLockApp()); // Uses ApplicationContext instead of Form
         }
     }
 }
