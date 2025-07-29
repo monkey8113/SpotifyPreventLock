@@ -191,12 +191,11 @@ namespace SpotifyPreventLock
                     }
                     else
                     {
-                        key.SetValue("SpotifyPreventLock", $"\"{Application.ExecutablePath}\"");
+                        // Updated with 10-second delay
+                        key.SetValue("SpotifyPreventLock", 
+                            $"cmd /c \"timeout 10 && start \"\" \"{Application.ExecutablePath}\"\"");
                     }
-                    
-                    if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
-                    {
-                        UpdateStartupMenuItem(menuItem);
+                    UpdateStartupMenuItem(menuItem);
                     }
                 }
             }
