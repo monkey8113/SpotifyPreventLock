@@ -3,11 +3,16 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Management;
-using System.Diagnostics;
+using System.IO;
+using System.Text.Json;
 
 namespace SpotifyPreventLock
 {
+    public class AppSettings
+    {
+        public int CheckInterval { get; set; } = 300000; // Default 5 minutes
+    }
+
     public class PreventLockApp : ApplicationContext
     {
         // ==== Windows API Imports ====
@@ -28,22 +33,71 @@ namespace SpotifyPreventLock
         // ==== App Settings ====
         private NotifyIcon trayIcon;
         private bool isRunning = true;
-        private int checkInterval = 5000; // Default 5 seconds
+        private AppSettings settings;
         private DateTime lastCheckTime = DateTime.MinValue;
+        private readonly string settingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "SpotifyPreventLock",
+            "settings.json");
 
         public PreventLockApp()
         {
-            // ==== Tray Icon Setup ====
+            // Load or create settings
+            LoadSettings();
+
+            // ==== Circular Tray Icon Setup ====
             trayIcon = new NotifyIcon()
             {
-                Icon = CreateColoredIcon(Color.Gray),
-                Text = "Spotify Prevent Lock\nTimer: " + (checkInterval / 1000) + "s",
+                Icon = CreateCircleIcon(Color.Gray),
+                Text = $"Spotify Prevent Lock\nTimer: {settings.CheckInterval / 1000}s",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
             };
 
             // ==== Start Worker Thread ====
             new Thread(WorkerThread) { IsBackground = true }.Start();
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(settingsPath))
+                {
+                    string json = File.ReadAllText(settingsPath);
+                    settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                }
+                else
+                {
+                    settings = new AppSettings();
+                    Directory.CreateDirectory(Path.GetDirectoryName(settingsPath));
+                }
+            }
+            catch
+            {
+                settings = new AppSettings();
+            }
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(settings);
+                File.WriteAllText(settingsPath, json);
+            }
+            catch { /* Ignore save errors */ }
+        }
+
+        private Icon CreateCircleIcon(Color color)
+        {
+            using var bmp = new Bitmap(16, 16);
+            using var g = Graphics.FromImage(bmp);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            using var brush = new SolidBrush(color);
+            g.FillEllipse(brush, 0, 0, 15, 15);
+            return Icon.FromHandle(bmp.GetHicon());
         }
 
         private ContextMenuStrip CreateContextMenu()
@@ -76,7 +130,7 @@ namespace SpotifyPreventLock
             {
                 Minimum = 1,
                 Maximum = 3600,
-                Value = checkInterval / 1000,
+                Value = settings.CheckInterval / 1000,
                 Width = 80,
                 Top = 40,
                 Left = 100
@@ -103,8 +157,9 @@ namespace SpotifyPreventLock
             
             if (dialog.ShowDialog() == DialogResult.OK)
             {
-                checkInterval = (int)numericBox.Value * 1000;
-                trayIcon.Text = "Spotify Prevent Lock\nTimer: " + (checkInterval / 1000) + "s";
+                settings.CheckInterval = (int)numericBox.Value * 1000;
+                trayIcon.Text = $"Spotify Prevent Lock\nTimer: {settings.CheckInterval / 1000}s";
+                SaveSettings();
             }
         }
 
@@ -112,7 +167,7 @@ namespace SpotifyPreventLock
         {
             while (isRunning)
             {
-                if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= checkInterval)
+                if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= settings.CheckInterval)
                 {
                     lastCheckTime = DateTime.Now;
                     bool isPlaying = IsSpotifyActive();
@@ -121,7 +176,7 @@ namespace SpotifyPreventLock
                         ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
                         : ExecutionState.ES_CONTINUOUS);
 
-                    trayIcon.Icon = CreateColoredIcon(isPlaying ? Color.LimeGreen : Color.Gray);
+                    trayIcon.Icon = CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
                     
                     if (isPlaying)
                     {
@@ -136,12 +191,12 @@ namespace SpotifyPreventLock
         {
             try
             {
-                // Check if Spotify window has audio focus (simplified approach)
-                foreach (Process proc in Process.GetProcessesByName("Spotify"))
+                foreach (var proc in System.Diagnostics.Process.GetProcessesByName("Spotify"))
                 {
-                    if (proc.MainWindowTitle != "" && !proc.MainWindowTitle.Contains("Spotify"))
+                    if (!string.IsNullOrEmpty(proc.MainWindowTitle) && 
+                        !proc.MainWindowTitle.Contains("Spotify"))
                     {
-                        return true; // Spotify is playing music
+                        return true;
                     }
                 }
                 return false;
@@ -150,14 +205,6 @@ namespace SpotifyPreventLock
             {
                 return false;
             }
-        }
-
-        private Icon CreateColoredIcon(Color color)
-        {
-            using var bmp = new Bitmap(16, 16);
-            using var g = Graphics.FromImage(bmp);
-            g.Clear(color);
-            return Icon.FromHandle(bmp.GetHicon());
         }
 
         private void OnExit()
