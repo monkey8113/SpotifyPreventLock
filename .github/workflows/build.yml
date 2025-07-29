@@ -1,29 +1,28 @@
 name: Build SpotifyPreventLock
-on: [push, workflow_dispatch]  # Runs on push or manual trigger
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"  # Latest LTS version
+          dotnet-version: "8.0.x"
 
-      - name: Build (Release)
+      - name: Build
+        run: dotnet build -c Release
+
+      - name: Publish Single EXE
         run: |
           dotnet publish -c Release -r win-x64 \
           --self-contained true \
-          /p:PublishSingleFile=true \
-          /p:IncludeNativeLibrariesForSelfExtract=true
+          /p:PublishSingleFile=true
 
       - name: Upload EXE
-        uses: actions/upload-artifact@v4  # Updated to v4!
+        uses: actions/upload-artifact@v4
         with:
           name: SpotifyPreventLock
-          path: |
-            bin/Release/net8.0/win-x64/publish/SpotifyPreventLock.exe
-            bin/Release/net8.0/win-x64/publish/SpotifyPreventLock.pdb  # Optional debug symbols
+          path: bin/Release/net8.0/win-x64/publish/SpotifyPreventLock.exe
