@@ -11,7 +11,7 @@ namespace SpotifyPreventLock
 {
     public class AppSettings
     {
-        public int CheckInterval { get; set; } = 300000; // Default 5 minutes
+        public int CheckInterval { get; set; } = 5000; // Default 5 seconds
     }
 
     public class PreventLockApp : ApplicationContext
@@ -33,7 +33,7 @@ namespace SpotifyPreventLock
 
         // ==== App Settings ====
         private readonly NotifyIcon trayIcon;
-        private volatile bool isRunning; // Marked as volatile for thread safety
+        private volatile bool isRunning;
         private readonly AppSettings settings;
         private DateTime lastCheckTime = DateTime.MinValue;
         private readonly string settingsPath;
@@ -41,12 +41,13 @@ namespace SpotifyPreventLock
 
         public PreventLockApp()
         {
-            // Initialize paths safely
+            // Initialize paths
             settingsDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "SpotifyPreventLock");
             settingsPath = Path.Combine(settingsDirectory, "settings.json");
 
+            // Load settings
             settings = LoadSettings();
             isRunning = true;
 
@@ -73,10 +74,7 @@ namespace SpotifyPreventLock
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
                 
-                if (!string.IsNullOrEmpty(settingsDirectory))
-                {
-                    Directory.CreateDirectory(settingsDirectory);
-                }
+                Directory.CreateDirectory(settingsDirectory);
                 return new AppSettings();
             }
             catch
@@ -89,12 +87,8 @@ namespace SpotifyPreventLock
         {
             try
             {
-                if (!string.IsNullOrEmpty(settingsDirectory))
-                {
-                    Directory.CreateDirectory(settingsDirectory);
-                    string json = JsonSerializer.Serialize(settings);
-                    File.WriteAllText(settingsPath, json);
-                }
+                string json = JsonSerializer.Serialize(settings);
+                File.WriteAllText(settingsPath, json);
             }
             catch { /* Ignore save errors */ }
         }
@@ -175,26 +169,42 @@ namespace SpotifyPreventLock
 
         private void WorkerThread()
         {
+            bool wasPlaying = false;
+            
             while (isRunning)
             {
-                if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= settings.CheckInterval)
+                bool isPlaying = IsSpotifyActive();
+                
+                // Immediate response to state changes
+                if (isPlaying != wasPlaying)
+                {
+                    UpdateSystemState(isPlaying);
+                    wasPlaying = isPlaying;
+                }
+                // Periodic check based on interval
+                else if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= settings.CheckInterval)
                 {
                     lastCheckTime = DateTime.Now;
-                    bool isPlaying = IsSpotifyActive();
-
-                    SetThreadExecutionState(isPlaying 
-                        ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
-                        : ExecutionState.ES_CONTINUOUS);
-
-                    trayIcon.Icon = CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
+                    UpdateSystemState(isPlaying);
                     
+                    // Reset idle timer if playing
                     if (isPlaying)
                     {
                         mouse_event(0x0001, 0, 0, 0, IntPtr.Zero);
                     }
                 }
-                Thread.Sleep(100);
+                
+                Thread.Sleep(100); // Quick responsiveness check
             }
+        }
+
+        private void UpdateSystemState(bool isPlaying)
+        {
+            SetThreadExecutionState(isPlaying 
+                ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
+                : ExecutionState.ES_CONTINUOUS);
+            
+            trayIcon.Icon = CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
         }
 
         private bool IsSpotifyActive()
