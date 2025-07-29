@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon>transparent_spotify.ico</ApplicationIcon>
+    <ApplicationIcon>app.ico</ApplicationIcon>  <!-- Only this line is needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
