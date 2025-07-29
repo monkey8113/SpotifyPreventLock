@@ -39,6 +39,7 @@ namespace SpotifyPreventLock
         private DateTime lastCheckTime = DateTime.MinValue;
         private readonly string settingsPath;
         private readonly string settingsDirectory;
+        private const string AppVersion = "v1.0.0";
 
         public PreventLockApp()
         {
@@ -56,7 +57,7 @@ namespace SpotifyPreventLock
             trayIcon = new NotifyIcon()
             {
                 Icon = CreateCircleIcon(Color.Gray),
-                Text = $"Spotify Prevent Lock\nTimer: {settings.CheckInterval / 1000}s",
+                Text = $"Spotify Prevent Lock {AppVersion}\nTimer: {settings.CheckInterval / 1000}s",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
             };
@@ -75,7 +76,10 @@ namespace SpotifyPreventLock
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
                 
-                Directory.CreateDirectory(settingsDirectory);
+                if (!string.IsNullOrEmpty(settingsDirectory))
+                {
+                    Directory.CreateDirectory(settingsDirectory);
+                }
                 return new AppSettings();
             }
             catch
@@ -88,8 +92,12 @@ namespace SpotifyPreventLock
         {
             try
             {
-                string json = JsonSerializer.Serialize(settings);
-                File.WriteAllText(settingsPath, json);
+                if (!string.IsNullOrEmpty(settingsDirectory))
+                {
+                    Directory.CreateDirectory(settingsDirectory);
+                    string json = JsonSerializer.Serialize(settings);
+                    File.WriteAllText(settingsPath, json);
+                }
             }
             catch { /* Ignore save errors */ }
         }
@@ -109,18 +117,29 @@ namespace SpotifyPreventLock
         {
             var menu = new ContextMenuStrip();
             
-            // Timer menu
+            // Timer menu (first item)
             var timerItem = new ToolStripMenuItem("Timer");
             timerItem.DropDownItems.Add("Set Custom Time...", null, (s, e) => ShowTimerDialog());
             menu.Items.Add(timerItem);
             
-            // Startup toggle
+            // Startup toggle (second item)
             var startupItem = new ToolStripMenuItem("Start with Windows");
             startupItem.Click += (s, e) => ToggleStartup();
             UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
             
+            // Version display (third item - non-clickable)
+            var versionItem = new ToolStripMenuItem(AppVersion)
+            {
+                Enabled = false,
+                Font = new Font(SystemFonts.MenuFont, FontStyle.Italic)
+            };
+            menu.Items.Add(versionItem);
+            
+            // Separator
             menu.Items.Add(new ToolStripSeparator());
+            
+            // Exit button (last item)
             menu.Items.Add("Exit", null, (s, e) => OnExit());
             
             return menu;
@@ -128,51 +147,53 @@ namespace SpotifyPreventLock
 
         private void ToggleStartup()
         {
-            if (IsInStartup())
+            try
             {
-                RemoveFromStartup();
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key != null)
+                {
+                    if (IsInStartup())
+                    {
+                        key.DeleteValue("SpotifyPreventLock", false);
+                    }
+                    else
+                    {
+                        key.SetValue("SpotifyPreventLock", $"\"{Application.ExecutablePath}\"");
+                    }
+                    
+                    // Update menu item in context menu
+                    if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
+                    {
+                        UpdateStartupMenuItem(menuItem);
+                    }
+                }
             }
-            else
-            {
-                AddToStartup();
-            }
-            // Update the menu item visual state
-            UpdateStartupMenuItem((ToolStripMenuItem)trayIcon.ContextMenuStrip.Items[1]);
+            catch { /* Silently fail */ }
         }
 
         private void UpdateStartupMenuItem(ToolStripMenuItem item)
         {
-            item.Checked = IsInStartup();
-            item.Text = IsInStartup() ? "✓ Start with Windows" : "Start with Windows";
+            if (item != null)
+            {
+                item.Checked = IsInStartup();
+                item.Text = IsInStartup() ? "✓ Start with Windows" : "Start with Windows";
+            }
         }
 
         private bool IsInStartup()
         {
-            using RegistryKey key = Registry.CurrentUser.OpenSubKey(
-                "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
-            return key?.GetValue("SpotifyPreventLock") != null;
-        }
-
-        private void AddToStartup()
-        {
-            try 
+            try
             {
-                using RegistryKey key = Registry.CurrentUser.OpenSubKey(
-                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-                key.SetValue("SpotifyPreventLock", $"\"{Application.ExecutablePath}\"");
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
+                return key?.GetValue("SpotifyPreventLock") != null;
             }
-            catch { /* Silently fail */ }
-        }
-
-        private void RemoveFromStartup()
-        {
-            try 
+            catch
             {
-                using RegistryKey key = Registry.CurrentUser.OpenSubKey(
-                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-                key.DeleteValue("SpotifyPreventLock", false);
+                return false;
             }
-            catch { /* Silently fail */ }
         }
 
         private void ShowTimerDialog()
@@ -219,7 +240,7 @@ namespace SpotifyPreventLock
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 settings.CheckInterval = (int)numericBox.Value * 1000;
-                trayIcon.Text = $"Spotify Prevent Lock\nTimer: {settings.CheckInterval / 1000}s";
+                trayIcon.Text = $"Spotify Prevent Lock {AppVersion}\nTimer: {settings.CheckInterval / 1000}s";
                 SaveSettings();
             }
         }
