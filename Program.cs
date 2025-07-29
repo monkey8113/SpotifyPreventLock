@@ -40,9 +40,13 @@ namespace SpotifyPreventLock
         private readonly string settingsPath;
         private readonly string settingsDirectory;
         private const string AppVersion = "v1.0.0";
+        private readonly Font versionFont;
 
         public PreventLockApp()
         {
+            // Initialize cached font
+            versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
+
             // Initialize paths
             settingsDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -132,7 +136,7 @@ namespace SpotifyPreventLock
             var versionItem = new ToolStripMenuItem(AppVersion)
             {
                 Enabled = false,
-                Font = new Font(SystemFonts.MenuFont, FontStyle.Italic)
+                Font = versionFont
             };
             menu.Items.Add(versionItem);
             
@@ -311,6 +315,16 @@ namespace SpotifyPreventLock
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                versionFont?.Dispose();
+                trayIcon?.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 
