@@ -2,25 +2,45 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- Explicitly set nullable context to "enable" (which you already have) -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    
+    <!-- Single-file publish settings -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    
+    <!-- Application icon -->
     <ApplicationIcon>app.ico</ApplicationIcon>
     <HighEntropyVA>true</HighEntropyVA>
+    
+    <!-- Enable trim warnings (optional but recommended for single-file) -->
+    <TrimMode>partial</TrimMode>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    
+    <!-- Generate documentation file (optional) -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Treat warnings as errors (optional but recommended) -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Package references -->
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
     
-    <Content Include="app.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="appoff.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- Embedded resources (better than Content for icons) -->
+    <EmbeddedResource Include="app.ico" />
+    <EmbeddedResource Include="appoff.ico" />
+  </ItemGroup>
+
+  <!-- Ensure icons are copied to output -->
+  <ItemGroup>
+    <None Include="app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="appoff.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
