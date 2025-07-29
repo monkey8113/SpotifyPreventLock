@@ -67,7 +67,36 @@ namespace SpotifyPreventLock
             };
 
             // Start worker thread
-            new Thread(WorkerThread) { IsBackground = true }.Start();
+            new Thread(WorkerThreadMethod) { IsBackground = true }.Start();
+        }
+
+        private AppSettings LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(settingsPath))
+                {
+                    string json = File.ReadAllText(settingsPath);
+                    return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                }
+                
+                Directory.CreateDirectory(settingsDirectory);
+                return new AppSettings();
+            }
+            catch
+            {
+                return new AppSettings();
+            }
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(settings);
+                File.WriteAllText(settingsPath, json);
+            }
+            catch { /* Ignore save errors */ }
         }
 
         private Icon LoadTrayIcon(bool isPlaying)
@@ -82,7 +111,6 @@ namespace SpotifyPreventLock
             }
             catch { /* Fall through to default */ }
             
-            // Fallback to colored circles
             return CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
         }
 
@@ -97,8 +125,156 @@ namespace SpotifyPreventLock
             return Icon.FromHandle(bmp.GetHicon());
         }
 
-        // ... [Rest of your existing methods remain unchanged] ...
-        
+        private ContextMenuStrip CreateContextMenu()
+        {
+            var menu = new ContextMenuStrip();
+            
+            var timerItem = new ToolStripMenuItem("Timer");
+            timerItem.DropDownItems.Add("Set Custom Time...", null, (s, e) => ShowTimerDialog());
+            menu.Items.Add(timerItem);
+            
+            var startupItem = new ToolStripMenuItem("Start with Windows");
+            startupItem.Click += (s, e) => ToggleStartup();
+            UpdateStartupMenuItem(startupItem);
+            menu.Items.Add(startupItem);
+            
+            var versionItem = new ToolStripMenuItem(AppVersion)
+            {
+                Enabled = false,
+                Font = versionFont
+            };
+            menu.Items.Add(versionItem);
+            
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Exit", null, (s, e) => OnExit());
+            
+            return menu;
+        }
+
+        private void ToggleStartup()
+        {
+            try
+            {
+                using RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key != null)
+                {
+                    if (IsInStartup())
+                    {
+                        key.DeleteValue("SpotifyPreventLock", false);
+                    }
+                    else
+                    {
+                        key.SetValue("SpotifyPreventLock", $"\"{Application.ExecutablePath}\"");
+                    }
+                    
+                    if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
+                    {
+                        UpdateStartupMenuItem(menuItem);
+                    }
+                }
+            }
+            catch { /* Silently fail */ }
+        }
+
+        private void UpdateStartupMenuItem(ToolStripMenuItem item)
+        {
+            item.Checked = IsInStartup();
+            item.Text = IsInStartup() ? "✓ Start with Windows" : "Start with Windows";
+        }
+
+        private bool IsInStartup()
+        {
+            try
+            {
+                using RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
+                return key?.GetValue("SpotifyPreventLock") != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void ShowTimerDialog()
+        {
+            using var dialog = new Form()
+            {
+                Text = "Set Timer",
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                Width = 250,
+                Height = 150,
+                StartPosition = FormStartPosition.CenterScreen,
+                ShowInTaskbar = false
+            };
+
+            var numericBox = new NumericUpDown()
+            {
+                Minimum = 1,
+                Maximum = 3600,
+                Value = settings.CheckInterval / 1000,
+                Width = 80,
+                Top = 40,
+                Left = 100
+            };
+            
+            var label = new Label()
+            {
+                Text = "Time (s):",
+                Top = 45,
+                Left = 30,
+                Width = 60
+            };
+            
+            var okButton = new Button()
+            {
+                Text = "OK",
+                DialogResult = DialogResult.OK,
+                Top = 80,
+                Left = 90,
+                Width = 75
+            };
+            
+            dialog.Controls.AddRange(new Control[] { label, numericBox, okButton });
+            
+            if (dialog.ShowDialog() == DialogResult.OK)
+            {
+                settings.CheckInterval = (int)numericBox.Value * 1000;
+                trayIcon.Text = $"Spotify Prevent Lock {AppVersion}\nTimer: {settings.CheckInterval / 1000}s";
+                SaveSettings();
+            }
+        }
+
+        private void WorkerThreadMethod()
+        {
+            bool wasPlaying = false;
+            
+            while (isRunning)
+            {
+                bool isPlaying = IsSpotifyActive();
+                
+                if (isPlaying != wasPlaying)
+                {
+                    UpdateSystemState(isPlaying);
+                    wasPlaying = isPlaying;
+                }
+                else if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= settings.CheckInterval)
+                {
+                    lastCheckTime = DateTime.Now;
+                    UpdateSystemState(isPlaying);
+                    
+                    if (isPlaying)
+                    {
+                        mouse_event(0x0001, 0, 0, 0, IntPtr.Zero);
+                    }
+                }
+                
+                Thread.Sleep(100);
+            }
+        }
+
         private void UpdateSystemState(bool isPlaying)
         {
             SetThreadExecutionState(isPlaying 
@@ -108,7 +284,43 @@ namespace SpotifyPreventLock
             trayIcon.Icon = LoadTrayIcon(isPlaying);
         }
 
-        // ... [Other methods unchanged] ...
+        private bool IsSpotifyActive()
+        {
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName("Spotify"))
+                {
+                    if (!string.IsNullOrWhiteSpace(proc.MainWindowTitle) && 
+                        !proc.MainWindowTitle.Contains("Spotify"))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void OnExit()
+        {
+            isRunning = false;
+            trayIcon.Visible = false;
+            trayIcon.Dispose();
+            Application.Exit();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                versionFont?.Dispose();
+                trayIcon?.Dispose();
+            }
+            base.Dispose(disposing);
+        }
     }
 
     static class Program
