@@ -15,7 +15,7 @@ The program quietly checks Spotify every few minutes:
 1. Looks for song titles in Spotify's window
 2. When music is playing:
    - Tells Windows "I'm still using the PC!" (keeps system awake)
-   - Makes tiny invisible mouse movements (prevents lock screen)
+   - Makes tiny invisible mouse movements (prevents lock screen) *you wont notice it
 3. Stops automatically when:
    - You pause or close Spotify
    - You manually lock your PC (`Win + L` still works)
