@@ -54,7 +54,7 @@ namespace SpotifyPreventLock
             settingsDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "SpotifyPreventLock");
-            Directory.CreateDirectory(settingsDirectory); // Ensure directory exists
+            Directory.CreateDirectory(settingsDirectory);
             settingsPath = Path.Combine(settingsDirectory, "settings.json");
 
             // Load settings
@@ -64,7 +64,7 @@ namespace SpotifyPreventLock
             // Initialize tray icon
             trayIcon = new NotifyIcon()
             {
-                Icon = LoadTrayIcon(false), // Start with inactive icon
+                Icon = LoadTrayIcon(false),
                 Text = $"Spotify Prevent Lock {AppVersion}\nTimer: {settings.CheckInterval / 1000}s",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
@@ -84,7 +84,6 @@ namespace SpotifyPreventLock
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
                 
-                // Create default settings if file doesn't exist
                 var defaultSettings = new AppSettings();
                 SaveSettings(defaultSettings);
                 return defaultSettings;
@@ -191,7 +190,9 @@ namespace SpotifyPreventLock
                     }
                     else
                     {
-                        key.SetValue("SpotifyPreventLock", $"\"{Application.ExecutablePath}\"");
+                        // Modified with 10-second delay
+                        key.SetValue("SpotifyPreventLock", 
+                            $"cmd /c \"timeout 10 && start \"\" \"{Application.ExecutablePath}\"\"");
                     }
                     
                     if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
@@ -364,6 +365,10 @@ namespace SpotifyPreventLock
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            
+            // Added 3-second delay to ensure tray is ready
+            Thread.Sleep(3000);
+            
             Application.Run(new PreventLockApp());
         }
     }
