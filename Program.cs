@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Management;
-using Windows.Media.Control;
+using AudioEndPointController;
 
 namespace SpotifyPreventLock
 {
@@ -28,11 +28,14 @@ namespace SpotifyPreventLock
         // ==== App Settings ====
         private NotifyIcon trayIcon;
         private bool isRunning = true;
-        private int checkInterval = 5000; // Default 5 seconds
+        private int checkInterval = 5000;
         private DateTime lastCheckTime = DateTime.MinValue;
+        private readonly IAudioController audioController;
 
         public PreventLockApp()
         {
+            audioController = new AudioController();
+            
             // ==== Tray Icon Setup ====
             trayIcon = new NotifyIcon()
             {
@@ -42,7 +45,6 @@ namespace SpotifyPreventLock
                 ContextMenuStrip = CreateContextMenu()
             };
 
-            // ==== Start Worker Thread ====
             new Thread(WorkerThread) { IsBackground = true }.Start();
         }
 
@@ -136,24 +138,20 @@ namespace SpotifyPreventLock
         {
             try
             {
-                // Check if Spotify process exists
-                if (!IsProcessRunning("Spotify")) return false;
-
-                // Check actual playback state
-                var sessionManager = GlobalSystemMediaTransportControlsSessionManager.RequestAsync().GetAwaiter().GetResult();
-                foreach (var session in sessionManager.GetSessions())
+                // Check if any audio is playing through the default device
+                foreach (var device in audioController.GetPlaybackDevices())
                 {
-                    if (session.SourceAppUserModelId?.Contains("Spotify") == true)
+                    if (device.IsDefault && device.AudioMeterInformation.MasterPeakValue > 0.01f)
                     {
-                        return session.GetPlaybackInfo().PlaybackStatus == 
-                            GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+                        return true;
                     }
                 }
                 return false;
             }
             catch
             {
-                return false;
+                // Fallback to process check if audio API fails
+                return IsProcessRunning("Spotify");
             }
         }
 
