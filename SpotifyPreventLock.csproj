@@ -5,19 +5,25 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon>app.ico</ApplicationIcon>  <!-- Only this line is needed -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <Win32Resource>$(IntermediateOutputPath)app.res</Win32Resource>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-  <Exec Command="magick convert app.ico -define icon:auto-resize -alpha on compiled.ico" />
-  <Exec Command="ResHacker.exe -addoverwrite $(TargetPath), $(TargetPath), compiled.ico, ICONGROUP,MAINICON," />
-</Target>
-
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
   </ItemGroup>
+
+  <Target Name="CompileIcon" BeforeTargets="CoreCompile">
+    <!-- First try with RC.exe -->
+    <Exec Command="rc.exe /fo "$(IntermediateOutputPath)app.res" app.rc" 
+          Condition="Exists('app.rc') And Exists('$(MSBuildBinPath)\rc.exe')" />
+    
+    <!-- Fallback for CI/CD environments -->
+    <Exec Command="dotnet winresizer $(MSBuildProjectDirectory)\app.ico /out:$(IntermediateOutputPath)app.res"
+          Condition="!Exists('$(MSBuildBinPath)\rc.exe')" />
+  </Target>
 </Project>
