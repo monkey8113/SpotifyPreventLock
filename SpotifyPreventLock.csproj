@@ -13,14 +13,6 @@
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
-    <!-- Use Windows Compatibility Pack for media controls -->
-    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.0.6" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Special reference for Windows Media APIs -->
-    <Reference Include="Windows.Media">
-      <HintPath>$(MSBuildProgramFiles32)\Windows Kits\10\References\10.0.19041.0\Windows.Foundation.FoundationContract\4.0.0.0\Windows.Foundation.FoundationContract.winmd</HintPath>
-    </Reference>
+    <PackageReference Include="AudioEndPointController" Version="2.1.0" />
   </ItemGroup>
 </Project>
