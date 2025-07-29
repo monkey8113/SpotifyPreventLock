@@ -11,7 +11,7 @@ namespace SpotifyPreventLock
 {
     public class AppSettings
     {
-        public int CheckInterval { get; set; } = 5000; // Default 5 seconds
+        public int CheckInterval { get; set; } = 300000; // Default 5 minutes
     }
 
     public class PreventLockApp : ApplicationContext
