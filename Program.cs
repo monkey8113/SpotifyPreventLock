@@ -6,12 +6,13 @@ using System.Threading;
 using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
+using Microsoft.Win32;
 
 namespace SpotifyPreventLock
 {
     public class AppSettings
     {
-        public int CheckInterval { get; set; } = 300000; // Default 5 minutes
+        public int CheckInterval { get; set; } = 5000; // Default 5 seconds
     }
 
     public class PreventLockApp : ApplicationContext
@@ -108,14 +109,70 @@ namespace SpotifyPreventLock
         {
             var menu = new ContextMenuStrip();
             
+            // Timer menu
             var timerItem = new ToolStripMenuItem("Timer");
             timerItem.DropDownItems.Add("Set Custom Time...", null, (s, e) => ShowTimerDialog());
-            
             menu.Items.Add(timerItem);
+            
+            // Startup toggle
+            var startupItem = new ToolStripMenuItem("Start with Windows");
+            startupItem.Click += (s, e) => ToggleStartup();
+            UpdateStartupMenuItem(startupItem);
+            menu.Items.Add(startupItem);
+            
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => OnExit());
             
             return menu;
+        }
+
+        private void ToggleStartup()
+        {
+            if (IsInStartup())
+            {
+                RemoveFromStartup();
+            }
+            else
+            {
+                AddToStartup();
+            }
+            // Update the menu item visual state
+            UpdateStartupMenuItem((ToolStripMenuItem)trayIcon.ContextMenuStrip.Items[1]);
+        }
+
+        private void UpdateStartupMenuItem(ToolStripMenuItem item)
+        {
+            item.Checked = IsInStartup();
+            item.Text = IsInStartup() ? "✓ Start with Windows" : "Start with Windows";
+        }
+
+        private bool IsInStartup()
+        {
+            using RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
+            return key?.GetValue("SpotifyPreventLock") != null;
+        }
+
+        private void AddToStartup()
+        {
+            try 
+            {
+                using RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                key.SetValue("SpotifyPreventLock", $"\"{Application.ExecutablePath}\"");
+            }
+            catch { /* Silently fail */ }
+        }
+
+        private void RemoveFromStartup()
+        {
+            try 
+            {
+                using RegistryKey key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                key.DeleteValue("SpotifyPreventLock", false);
+            }
+            catch { /* Silently fail */ }
         }
 
         private void ShowTimerDialog()
