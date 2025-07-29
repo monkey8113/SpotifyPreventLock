@@ -5,26 +5,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>app.ico</ApplicationIcon>  <!-- Only this line is needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <ApplicationIcon>app.ico</ApplicationIcon>
-    <PlatformTarget>x64</PlatformTarget>
-    <!-- Remove WindowsSDKVersion as it may cause conflicts -->
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
-    
-    <!-- Revert to None instead of EmbeddedResource -->
-    <None Include="app.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <DebugType>none</DebugType>
-    <!-- Remove Win32Resource to prevent build errors -->
-  </PropertyGroup>
 </Project>
