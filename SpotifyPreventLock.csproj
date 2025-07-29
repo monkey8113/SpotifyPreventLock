@@ -8,16 +8,24 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <!-- Only new line added -->
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <!-- Add these to prevent build warnings -->
+    <PlatformTarget>x64</PlatformTarget>
+    <WindowsSDKVersion>10.0.19041.0</WindowsSDKVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
-    <!-- Only new item added -->
-    <Content Include="icon.ico">
+    
+    <!-- Make sure this matches your actual icon filename -->
+    <None Include="app.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
   </ItemGroup>
+
+  <!-- Add this to ensure proper cleanup -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
 </Project>
