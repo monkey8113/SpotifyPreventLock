@@ -7,6 +7,7 @@ using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Win32;
+using IWshRuntimeLibrary; // For shortcut creation
 
 namespace SpotifyPreventLock
 {
@@ -159,7 +160,6 @@ namespace SpotifyPreventLock
             
             var startupItem = new ToolStripMenuItem("Start with Windows");
             startupItem.Click += (s, e) => ToggleStartup();
-            UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
             
             var versionItem = new ToolStripMenuItem(AppVersion)
@@ -172,6 +172,7 @@ namespace SpotifyPreventLock
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => OnExit());
             
+            UpdateStartupMenuItem(); // Initialize menu item state
             return menu;
         }
 
@@ -179,64 +180,54 @@ namespace SpotifyPreventLock
         {
             try
             {
-                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
-                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-                
-                if (key != null)
+                string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+                string shortcutPath = Path.Combine(startupFolder, "SpotifyPreventLock.lnk");
+
+                if (IsInStartup())
                 {
-                    if (IsInStartup())
+                    // Remove from startup
+                    if (File.Exists(shortcutPath))
                     {
-                        key.DeleteValue("SpotifyPreventLock", false);
-                    }
-                    else
-                    {
-                        // Modified to use explorer.exe as parent process
-                        key.SetValue("SpotifyPreventLock", 
-                            $"explorer.exe \"{Application.ExecutablePath}\"");
-                    }
-                    
-                    if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
-                    {
-                        UpdateStartupMenuItem(menuItem);
+                        File.Delete(shortcutPath);
                     }
                 }
+                else
+                {
+                    // Add to startup
+                    var shell = new WshShell();
+                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = Application.ExecutablePath;
+                    shortcut.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                    shortcut.Description = "Spotify Prevent Lock";
+                    shortcut.Save();
+                }
+
+                UpdateStartupMenuItem();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error toggling startup: {ex.Message}");
                 MessageBox.Show("Failed to update startup settings. Please try again.",
-                              "Startup Error",
-                              MessageBoxButtons.OK,
-                              MessageBoxIcon.Warning);
-            }
-        }
-
-        private void UpdateStartupMenuItem(ToolStripMenuItem item)
-        {
-            try
-            {
-                bool isEnabled = IsInStartup();
-                item.Checked = isEnabled;
-                item.Text = isEnabled ? "✓ Start with Windows" : "Start with Windows";
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error updating menu item: {ex.Message}");
+                                "Startup Error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
             }
         }
 
         private bool IsInStartup()
         {
-            try
+            string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            string shortcutPath = Path.Combine(startupFolder, "SpotifyPreventLock.lnk");
+            return File.Exists(shortcutPath);
+        }
+
+        private void UpdateStartupMenuItem()
+        {
+            if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
             {
-                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
-                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
-                return key?.GetValue("SpotifyPreventLock") != null;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error checking startup: {ex.Message}");
-                return false;
+                bool isEnabled = IsInStartup();
+                menuItem.Checked = isEnabled;
+                menuItem.Text = isEnabled ? "✓ Start with Windows" : "Start with Windows";
             }
         }
 
