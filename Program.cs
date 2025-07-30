@@ -37,11 +37,14 @@ namespace SpotifyPreventLock
         private readonly AppSettings settings;
         private readonly string settingsPath;
         private readonly string settingsDirectory;
-        private const string AppVersion = "v1.1.0";
+        private readonly string appVersion;
         private readonly Font versionFont;
 
         public PreventLockApp()
         {
+            // Get version from assembly (which comes from .csproj)
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            appVersion = $"v{version.Major}.{version.Minor}.{version.Build}";
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
 
             settingsDirectory = Path.Combine(
@@ -56,7 +59,7 @@ namespace SpotifyPreventLock
             trayIcon = new NotifyIcon()
             {
                 Icon = LoadTrayIcon(false),
-                Text = $"Spotify Prevent Lock {AppVersion}\nCheck Interval: {settings.CheckInterval}ms",
+                Text = $"Spotify Prevent Lock {appVersion}\nCheck Interval: {settings.CheckInterval}ms",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
             };
@@ -152,7 +155,7 @@ namespace SpotifyPreventLock
             UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
 
-            var versionItem = new ToolStripMenuItem(AppVersion)
+            var versionItem = new ToolStripMenuItem(appVersion)
             {
                 Enabled = false,
                 Font = versionFont
@@ -277,7 +280,7 @@ namespace SpotifyPreventLock
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 settings.CheckInterval = (int)numericBox.Value;
-                trayIcon.Text = $"Spotify Prevent Lock {AppVersion}\nCheck Interval: {settings.CheckInterval}ms";
+                trayIcon.Text = $"Spotify Prevent Lock {appVersion}\nCheck Interval: {settings.CheckInterval}ms";
                 SaveSettings();
             }
         }
