@@ -40,7 +40,7 @@ namespace SpotifyPreventLock
         private DateTime lastCheckTime = DateTime.MinValue;
         private readonly string settingsPath;
         private readonly string settingsDirectory;
-        private const string AppVersion = "v1.0.0";
+        private const string AppVersion = "v1.0.1";
         private readonly Font versionFont;
         private readonly string appDirectory;
 
@@ -109,11 +109,10 @@ namespace SpotifyPreventLock
         {
             try
             {
-                string iconFile = isPlaying ? "app.ico" : "appoff.ico";
-                string fullPath = Path.Combine(appDirectory, iconFile);
-                if (File.Exists(fullPath))
+                string iconFile = isPlaying ? "SpotifyPreventLock.app.ico" : "SpotifyPreventLock.appoff.ico";
+                using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(iconFile);
+                if (stream != null)
                 {
-                    using var stream = File.OpenRead(fullPath);
                     return new Icon(stream);
                 }
             }
