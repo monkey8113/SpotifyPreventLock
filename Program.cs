@@ -13,14 +13,11 @@ namespace SpotifyPreventLock
 {
     public class AppSettings
     {
-        public int CheckInterval { get; set; } = 300000; // Default 5 minutes
+        public int CheckInterval { get; set; } = 2000; // Default 2000ms (2 seconds)
     }
 
     public class PreventLockApp : ApplicationContext
     {
-        [DllImport("user32.dll")]
-        private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, IntPtr dwExtraInfo);
-
         [DllImport("kernel32.dll")]
         private static extern ExecutionState SetThreadExecutionState(ExecutionState esFlags);
 
@@ -38,7 +35,6 @@ namespace SpotifyPreventLock
         private readonly NotifyIcon trayIcon;
         private volatile bool isRunning;
         private readonly AppSettings settings;
-        private DateTime lastCheckTime = DateTime.MinValue;
         private readonly string settingsPath;
         private readonly string settingsDirectory;
         private const string AppVersion = "v1.0.0";
@@ -60,7 +56,7 @@ namespace SpotifyPreventLock
             trayIcon = new NotifyIcon()
             {
                 Icon = LoadTrayIcon(false),
-                Text = $"Spotify Prevent Lock {AppVersion}\nTimer: {settings.CheckInterval / 1000}s",
+                Text = $"Spotify Prevent Lock {AppVersion}\nCheck Interval: {settings.CheckInterval}ms",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
             };
@@ -148,7 +144,7 @@ namespace SpotifyPreventLock
             var menu = new ContextMenuStrip();
 
             var timerItem = new ToolStripMenuItem("Timer");
-            timerItem.DropDownItems.Add("Set Custom Time...", null, (s, e) => ShowTimerDialog());
+            timerItem.DropDownItems.Add("Set Check Interval...", null, (s, e) => ShowTimerDialog());
             menu.Items.Add(timerItem);
 
             var startupItem = new ToolStripMenuItem("Start with Windows");
@@ -188,10 +184,7 @@ namespace SpotifyPreventLock
                             $"explorer.exe \"{Application.ExecutablePath}\"");
                     }
 
-                    if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
-                    {
-                        UpdateStartupMenuItem(menuItem);
-                    }
+                    UpdateStartupMenuItem();
                 }
             }
             catch (Exception ex)
@@ -234,29 +227,39 @@ namespace SpotifyPreventLock
         {
             using var dialog = new Form()
             {
-                Text = "Set Timer",
+                Text = "Set Check Interval",
                 FormBorderStyle = FormBorderStyle.FixedDialog,
-                Width = 250,
-                Height = 150,
+                Width = 300,
+                Height = 180,
                 StartPosition = FormStartPosition.CenterScreen,
                 ShowInTaskbar = false
             };
 
+            var infoLabel = new Label()
+            {
+                Text = "Adjust how often the app checks for Spotify activity\n(100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
+                Top = 20,
+                Left = 20,
+                Width = 260,
+                Height = 40
+            };
+
             var numericBox = new NumericUpDown()
             {
-                Minimum = 1,
-                Maximum = 3600,
-                Value = settings.CheckInterval / 1000,
+                Minimum = 100,
+                Maximum = 10000,
+                Value = settings.CheckInterval,
                 Width = 80,
-                Top = 40,
-                Left = 100
+                Top = 70,
+                Left = 110,
+                Increment = 100
             };
 
             var label = new Label()
             {
-                Text = "Time (s):",
-                Top = 45,
-                Left = 30,
+                Text = "Time (ms):",
+                Top = 73,
+                Left = 40,
                 Width = 60
             };
 
@@ -264,17 +267,17 @@ namespace SpotifyPreventLock
             {
                 Text = "OK",
                 DialogResult = DialogResult.OK,
-                Top = 80,
-                Left = 90,
+                Top = 110,
+                Left = 110,
                 Width = 75
             };
 
-            dialog.Controls.AddRange(new Control[] { label, numericBox, okButton });
+            dialog.Controls.AddRange(new Control[] { infoLabel, label, numericBox, okButton });
 
             if (dialog.ShowDialog() == DialogResult.OK)
             {
-                settings.CheckInterval = (int)numericBox.Value * 1000;
-                trayIcon.Text = $"Spotify Prevent Lock {AppVersion}\nTimer: {settings.CheckInterval / 1000}s";
+                settings.CheckInterval = (int)numericBox.Value;
+                trayIcon.Text = $"Spotify Prevent Lock {AppVersion}\nCheck Interval: {settings.CheckInterval}ms";
                 SaveSettings();
             }
         }
@@ -292,18 +295,8 @@ namespace SpotifyPreventLock
                     UpdateSystemState(isPlaying);
                     wasPlaying = isPlaying;
                 }
-                else if ((DateTime.Now - lastCheckTime).TotalMilliseconds >= settings.CheckInterval)
-                {
-                    lastCheckTime = DateTime.Now;
-                    UpdateSystemState(isPlaying);
 
-                    if (isPlaying)
-                    {
-                        mouse_event(0x0001, 0, 0, 0, IntPtr.Zero);
-                    }
-                }
-
-                Thread.Sleep(100);
+                Thread.Sleep(settings.CheckInterval);
             }
         }
 
@@ -313,11 +306,7 @@ namespace SpotifyPreventLock
                 ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
                 : ExecutionState.ES_CONTINUOUS);
 
-            var icon = LoadTrayIcon(isPlaying);
-            if (icon != null)
-            {
-                trayIcon.Icon = icon;
-            }
+            trayIcon.Icon = LoadTrayIcon(isPlaying);
         }
 
         private bool IsSpotifyActive()
