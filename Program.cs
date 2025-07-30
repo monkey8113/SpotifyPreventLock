@@ -6,8 +6,6 @@ using System.Threading;
 using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
-using Microsoft.Win32;
-using IWshRuntimeLibrary; // For shortcut creation
 
 namespace SpotifyPreventLock
 {
@@ -18,7 +16,6 @@ namespace SpotifyPreventLock
 
     public class PreventLockApp : ApplicationContext
     {
-        // ==== Windows API Imports ====
         [DllImport("user32.dll")]
         private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, IntPtr dwExtraInfo);
 
@@ -36,7 +33,6 @@ namespace SpotifyPreventLock
             ES_SYSTEM_REQUIRED = 0x00000001
         }
 
-        // ==== App Settings ====
         private readonly NotifyIcon trayIcon;
         private volatile bool isRunning;
         private readonly AppSettings settings;
@@ -48,21 +44,17 @@ namespace SpotifyPreventLock
 
         public PreventLockApp()
         {
-            // Initialize cached font
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
 
-            // Initialize paths
             settingsDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "SpotifyPreventLock");
             Directory.CreateDirectory(settingsDirectory);
             settingsPath = Path.Combine(settingsDirectory, "settings.json");
 
-            // Load settings
             settings = LoadSettings();
             isRunning = true;
 
-            // Initialize tray icon
             trayIcon = new NotifyIcon()
             {
                 Icon = LoadTrayIcon(false),
@@ -71,7 +63,6 @@ namespace SpotifyPreventLock
                 ContextMenuStrip = CreateContextMenu()
             };
 
-            // Start worker thread
             new Thread(WorkerThreadMethod) { IsBackground = true }.Start();
         }
 
@@ -84,7 +75,7 @@ namespace SpotifyPreventLock
                     string json = File.ReadAllText(settingsPath);
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
-                
+
                 var defaultSettings = new AppSettings();
                 SaveSettings(defaultSettings);
                 return defaultSettings;
@@ -125,7 +116,7 @@ namespace SpotifyPreventLock
             {
                 Debug.WriteLine($"Error loading icon: {ex.Message}");
             }
-            
+
             return CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
         }
 
@@ -153,26 +144,26 @@ namespace SpotifyPreventLock
         private ContextMenuStrip CreateContextMenu()
         {
             var menu = new ContextMenuStrip();
-            
+
             var timerItem = new ToolStripMenuItem("Timer");
             timerItem.DropDownItems.Add("Set Custom Time...", null, (s, e) => ShowTimerDialog());
             menu.Items.Add(timerItem);
-            
+
             var startupItem = new ToolStripMenuItem("Start with Windows");
             startupItem.Click += (s, e) => ToggleStartup();
+            UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
-            
+
             var versionItem = new ToolStripMenuItem(AppVersion)
             {
                 Enabled = false,
                 Font = versionFont
             };
             menu.Items.Add(versionItem);
-            
+
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => OnExit());
-            
-            UpdateStartupMenuItem(); // Initialize menu item state
+
             return menu;
         }
 
@@ -181,54 +172,41 @@ namespace SpotifyPreventLock
             try
             {
                 string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                string shortcutPath = Path.Combine(startupFolder, "SpotifyPreventLock.lnk");
+                string exePath = Application.ExecutablePath;
+                string shortcutPath = Path.Combine(startupFolder, Path.GetFileName(exePath));
 
-                if (IsInStartup())
+                if (File.Exists(shortcutPath))
                 {
-                    // Remove from startup
-                    if (File.Exists(shortcutPath))
-                    {
-                        File.Delete(shortcutPath);
-                    }
+                    File.Delete(shortcutPath);
                 }
                 else
                 {
-                    // Add to startup
-                    var shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
-                    shortcut.TargetPath = Application.ExecutablePath;
-                    shortcut.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
-                    shortcut.Description = "Spotify Prevent Lock";
-                    shortcut.Save();
+                    File.Copy(exePath, shortcutPath, true);
                 }
 
-                UpdateStartupMenuItem();
+                if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
+                {
+                    UpdateStartupMenuItem(menuItem);
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error toggling startup: {ex.Message}");
-                MessageBox.Show("Failed to update startup settings. Please try again.",
-                                "Startup Error",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Warning);
             }
+        }
+
+        private void UpdateStartupMenuItem(ToolStripMenuItem item)
+        {
+            item.Checked = IsInStartup();
+            item.Text = item.Checked ? "✓ Start with Windows" : "Start with Windows";
         }
 
         private bool IsInStartup()
         {
             string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            string shortcutPath = Path.Combine(startupFolder, "SpotifyPreventLock.lnk");
-            return File.Exists(shortcutPath);
-        }
-
-        private void UpdateStartupMenuItem()
-        {
-            if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
-            {
-                bool isEnabled = IsInStartup();
-                menuItem.Checked = isEnabled;
-                menuItem.Text = isEnabled ? "✓ Start with Windows" : "Start with Windows";
-            }
+            string exeName = Path.GetFileName(Application.ExecutablePath);
+            string startupPath = Path.Combine(startupFolder, exeName);
+            return File.Exists(startupPath);
         }
 
         private void ShowTimerDialog()
@@ -252,7 +230,7 @@ namespace SpotifyPreventLock
                 Top = 40,
                 Left = 100
             };
-            
+
             var label = new Label()
             {
                 Text = "Time (s):",
@@ -260,7 +238,7 @@ namespace SpotifyPreventLock
                 Left = 30,
                 Width = 60
             };
-            
+
             var okButton = new Button()
             {
                 Text = "OK",
@@ -269,9 +247,9 @@ namespace SpotifyPreventLock
                 Left = 90,
                 Width = 75
             };
-            
+
             dialog.Controls.AddRange(new Control[] { label, numericBox, okButton });
-            
+
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 settings.CheckInterval = (int)numericBox.Value * 1000;
@@ -283,11 +261,11 @@ namespace SpotifyPreventLock
         private void WorkerThreadMethod()
         {
             bool wasPlaying = false;
-            
+
             while (isRunning)
             {
                 bool isPlaying = IsSpotifyActive();
-                
+
                 if (isPlaying != wasPlaying)
                 {
                     UpdateSystemState(isPlaying);
@@ -297,23 +275,23 @@ namespace SpotifyPreventLock
                 {
                     lastCheckTime = DateTime.Now;
                     UpdateSystemState(isPlaying);
-                    
+
                     if (isPlaying)
                     {
                         mouse_event(0x0001, 0, 0, 0, IntPtr.Zero);
                     }
                 }
-                
+
                 Thread.Sleep(100);
             }
         }
 
         private void UpdateSystemState(bool isPlaying)
         {
-            SetThreadExecutionState(isPlaying 
+            SetThreadExecutionState(isPlaying
                 ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
                 : ExecutionState.ES_CONTINUOUS);
-            
+
             var icon = LoadTrayIcon(isPlaying);
             if (icon != null)
             {
@@ -327,7 +305,7 @@ namespace SpotifyPreventLock
             {
                 foreach (var proc in Process.GetProcessesByName("Spotify"))
                 {
-                    if (proc != null && !string.IsNullOrEmpty(proc.MainWindowTitle) && 
+                    if (proc != null && !string.IsNullOrEmpty(proc.MainWindowTitle) &&
                         !proc.MainWindowTitle.Contains("Spotify", StringComparison.OrdinalIgnoreCase))
                     {
                         return true;
@@ -368,10 +346,7 @@ namespace SpotifyPreventLock
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            
-            // Wait for system tray to initialize
             Thread.Sleep(3000);
-            
             Application.Run(new PreventLockApp());
         }
     }
