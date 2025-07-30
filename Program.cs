@@ -43,7 +43,6 @@ namespace SpotifyPreventLock
 
         public PreventLockApp()
         {
-            // Get dynamic version from assembly
             appVersion = GetAppVersion();
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
 
@@ -64,7 +63,7 @@ namespace SpotifyPreventLock
                 ContextMenuStrip = CreateContextMenu()
             };
 
-            // Validate startup entry on launch
+            CleanupRegistryEntries();
             ValidateStartupEntry();
 
             new Thread(WorkerThreadMethod) { IsBackground = true }.Start();
@@ -192,7 +191,6 @@ namespace SpotifyPreventLock
                     }
                     else
                     {
-                        // Store path + version + timestamp
                         string valueData = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
                         key.SetValue("SpotifyPreventLock", valueData);
                     }
@@ -230,28 +228,53 @@ namespace SpotifyPreventLock
                 
                 if (key?.GetValue("SpotifyPreventLock") is string valueData)
                 {
-                    string[] parts = valueData.Split('|');
+                    string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
                     
-                    // Basic format check
-                    if (parts.Length < 2) return false;
-                    
-                    string storedPath = parts[0].Trim('"');
-                    string storedVersion = parts[1];
-                    
-                    // Check if path exists and version matches
-                    return File.Exists(storedPath) && 
-                           PathsEqual(storedPath, Application.ExecutablePath) &&
-                           storedVersion == appVersion;
+                    if (parts.Length >= 2)
+                    {
+                        string storedPath = parts[0].Trim('"');
+                        string storedVersion = parts[1];
+                        
+                        return File.Exists(storedPath) && 
+                               PathsEqual(storedPath, Application.ExecutablePath) &&
+                               storedVersion == appVersion;
+                    }
                 }
+                return false;
             }
-            catch { /* Error handling */ }
-            return false;
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error checking startup: {ex.Message}");
+                return false;
+            }
         }
 
         private static bool PathsEqual(string path1, string path2)
         {
             return Path.GetFullPath(path1)
                 .Equals(Path.GetFullPath(path2), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void CleanupRegistryEntries()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key == null) return;
+
+                foreach (var valueName in key.GetValueNames()
+                    .Where(n => n.StartsWith("SpotifyPreventLock", StringComparison.OrdinalIgnoreCase)))
+                {
+                    try
+                    {
+                        key.DeleteValue(valueName, false);
+                    }
+                    catch { /* Continue if we can't delete one */ }
+                }
+            }
+            catch { /* Silent failure is okay */ }
         }
 
         private void ValidateStartupEntry()
@@ -263,34 +286,13 @@ namespace SpotifyPreventLock
                 
                 if (key?.GetValue("SpotifyPreventLock") is string valueData)
                 {
-                    string[] parts = valueData.Split('|');
+                    string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
                     
-                    // Check if this is an old format entry
-                    if (parts.Length < 2)
+                    if (parts.Length < 2 || 
+                        !File.Exists(parts[0].Trim('"')) || 
+                        !PathsEqual(parts[0].Trim('"'), Application.ExecutablePath))
                     {
-                        // Convert old format to new format
-                        string newValue = $"\"{parts[0].Trim('"')}\"|{appVersion}|{DateTime.Now.Ticks}";
-                        key.SetValue("SpotifyPreventLock", newValue);
-                    }
-                    else if (parts.Length >= 2)
-                    {
-                        string storedPath = parts[0].Trim('"');
-                        string storedVersion = parts[1];
-                        
-                        // Case 1: Path exists but isn't this executable
-                        if (File.Exists(storedPath) && !PathsEqual(storedPath, Application.ExecutablePath))
-                        {
-                            // Keep old entry but mark as inactive
-                            key.SetValue("SpotifyPreventLock_OLD", valueData);
-                            key.DeleteValue("SpotifyPreventLock");
-                        }
-                        // Case 2: Version mismatch
-                        else if (storedVersion != appVersion)
-                        {
-                            // Update to current version
-                            string newValue = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
-                            key.SetValue("SpotifyPreventLock", newValue);
-                        }
+                        key.DeleteValue("SpotifyPreventLock", false);
                     }
                 }
             }
@@ -429,56 +431,7 @@ namespace SpotifyPreventLock
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            
-            // Clean up old registry entries before starting
-            CleanupOldRegistryEntries();
-            
-            // Wait for system tray to initialize
-            Thread.Sleep(3000);
-            
             Application.Run(new PreventLockApp());
-        }
-
-        private static void CleanupOldRegistryEntries()
-        {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(
-                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-                
-                if (key == null) return;
-
-                // Get all values that look like our app
-                var values = key.GetValueNames()
-                    .Where(name => name.StartsWith("SpotifyPreventLock"))
-                    .ToList();
-
-                string currentExe = Path.GetFileName(Application.ExecutablePath);
-
-                // Clean up invalid entries
-                foreach (var valueName in values)
-                {
-                    if (key.GetValue(valueName) is string valueData)
-                    {
-                        string[] parts = valueData.Split('|');
-                        if (parts.Length > 0)
-                        {
-                            string storedPath = parts[0].Trim('"');
-                            
-                            // Delete if:
-                            // 1. It's not the current EXE path, OR
-                            // 2. It's an old format entry
-                            if ((!File.Exists(storedPath) || 
-                                !Path.GetFileName(storedPath).Equals(currentExe, StringComparison.OrdinalIgnoreCase)) &&
-                                valueName != "SpotifyPreventLock")
-                            {
-                                key.DeleteValue(valueName, false);
-                            }
-                        }
-                    }
-                }
-            }
-            catch { /* Silent failure is okay */ }
         }
     }
 }
