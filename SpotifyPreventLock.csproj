@@ -7,21 +7,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
     
-    <!-- Version Control -->
-    <Version>1.0.0</Version>                  <!-- NuGet package version -->
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>  <!-- Assembly version -->
-    <FileVersion>1.0.0.0</FileVersion>         <!-- File version -->
-    <InformationalVersion>1.0.0</InformationalVersion> <!-- Display version -->
+    <!-- Version Control - Update these for each release -->
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0</InformationalVersion>
     
     <!-- Application Settings -->
     <ApplicationIcon>app.ico</ApplicationIcon>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Deterministic>true</Deterministic>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,9 +41,15 @@
   <!-- Auto-versioning for debug builds -->
   <Target Name="SetDebugVersion" BeforeTargets="CoreCompile" Condition="'$(Configuration)' == 'Debug'">
     <PropertyGroup>
-      <VersionSuffix>dev-$([System.DateTime]::Now.ToString(yyyyMMdd-HHmm))</VersionSuffix>
+      <VersionSuffix>dev-$([System.DateTime]::Now.ToString("yyyyMMdd-HHmm"))</VersionSuffix>
       <InformationalVersion>$(Version)-$(VersionSuffix)</InformationalVersion>
     </PropertyGroup>
+  </Target>
+
+  <!-- Ensure icons are properly embedded -->
+  <Target Name="ValidateIconFiles" BeforeTargets="Build">
+    <Error Text="app.ico is missing" Condition="!Exists('app.ico')" />
+    <Error Text="appoff.ico is missing" Condition="!Exists('appoff.ico')" />
   </Target>
 
 </Project>
