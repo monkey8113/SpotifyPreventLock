@@ -48,7 +48,7 @@ namespace SpotifyPreventLock
         {
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
 
-            appDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
+            appDirectory = Path.GetDirectoryName(AppContext.BaseDirectory)!;
 
             settingsDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
