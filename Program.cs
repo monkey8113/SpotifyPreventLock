@@ -7,6 +7,7 @@ using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
 using System.Reflection;
+using System.Linq;
 using Microsoft.Win32;
 
 namespace SpotifyPreventLock
@@ -37,11 +38,13 @@ namespace SpotifyPreventLock
         private readonly AppSettings settings;
         private readonly string settingsPath;
         private readonly string settingsDirectory;
-        private const string AppVersion = "v1.1.0";
+        private readonly string appVersion;
         private readonly Font versionFont;
 
         public PreventLockApp()
         {
+            // Get dynamic version from assembly
+            appVersion = GetAppVersion();
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
 
             settingsDirectory = Path.Combine(
@@ -56,12 +59,21 @@ namespace SpotifyPreventLock
             trayIcon = new NotifyIcon()
             {
                 Icon = LoadTrayIcon(false),
-                Text = $"Spotify Prevent Lock {AppVersion}\nCheck Interval: {settings.CheckInterval}ms",
+                Text = $"Spotify Prevent Lock {appVersion}\nCheck Interval: {settings.CheckInterval}ms",
                 Visible = true,
                 ContextMenuStrip = CreateContextMenu()
             };
 
+            // Validate startup entry on launch
+            ValidateStartupEntry();
+
             new Thread(WorkerThreadMethod) { IsBackground = true }.Start();
+        }
+
+        private static string GetAppVersion()
+        {
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            return $"v{version.Major}.{version.Minor}.{version.Build}";
         }
 
         private AppSettings LoadSettings()
@@ -143,7 +155,6 @@ namespace SpotifyPreventLock
         {
             var menu = new ContextMenuStrip();
 
-            // Changed from dropdown to direct menu item
             var timerItem = new ToolStripMenuItem("Set Check Interval...");
             timerItem.Click += (s, e) => ShowTimerDialog();
             menu.Items.Add(timerItem);
@@ -153,7 +164,7 @@ namespace SpotifyPreventLock
             UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
 
-            var versionItem = new ToolStripMenuItem(AppVersion)
+            var versionItem = new ToolStripMenuItem(appVersion)
             {
                 Enabled = false,
                 Font = versionFont
@@ -170,7 +181,7 @@ namespace SpotifyPreventLock
         {
             try
             {
-                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
+                using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
 
                 if (key != null)
@@ -181,8 +192,9 @@ namespace SpotifyPreventLock
                     }
                     else
                     {
-                        key.SetValue("SpotifyPreventLock", 
-                            $"explorer.exe \"{Application.ExecutablePath}\"");
+                        // Store path + version + timestamp
+                        string valueData = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
+                        key.SetValue("SpotifyPreventLock", valueData);
                     }
 
                     UpdateStartupMenuItem();
@@ -213,15 +225,76 @@ namespace SpotifyPreventLock
         {
             try
             {
-                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
+                using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
-                return key?.GetValue("SpotifyPreventLock") != null;
+                
+                if (key?.GetValue("SpotifyPreventLock") is string valueData)
+                {
+                    string[] parts = valueData.Split('|');
+                    
+                    // Basic format check
+                    if (parts.Length < 2) return false;
+                    
+                    string storedPath = parts[0].Trim('"');
+                    string storedVersion = parts[1];
+                    
+                    // Check if path exists and version matches
+                    return File.Exists(storedPath) && 
+                           PathsEqual(storedPath, Application.ExecutablePath) &&
+                           storedVersion == appVersion;
+                }
             }
-            catch (Exception ex)
+            catch { /* Error handling */ }
+            return false;
+        }
+
+        private static bool PathsEqual(string path1, string path2)
+        {
+            return Path.GetFullPath(path1)
+                .Equals(Path.GetFullPath(path2), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ValidateStartupEntry()
+        {
+            try
             {
-                Debug.WriteLine($"Error checking startup: {ex.Message}");
-                return false;
+                using var key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key?.GetValue("SpotifyPreventLock") is string valueData)
+                {
+                    string[] parts = valueData.Split('|');
+                    
+                    // Check if this is an old format entry
+                    if (parts.Length < 2)
+                    {
+                        // Convert old format to new format
+                        string newValue = $"\"{parts[0].Trim('"')}\"|{appVersion}|{DateTime.Now.Ticks}";
+                        key.SetValue("SpotifyPreventLock", newValue);
+                    }
+                    else if (parts.Length >= 2)
+                    {
+                        string storedPath = parts[0].Trim('"');
+                        string storedVersion = parts[1];
+                        
+                        // Case 1: Path exists but isn't this executable
+                        if (File.Exists(storedPath) && !PathsEqual(storedPath, Application.ExecutablePath))
+                        {
+                            // Keep old entry but mark as inactive
+                            key.SetValue("SpotifyPreventLock_OLD", valueData);
+                            key.DeleteValue("SpotifyPreventLock");
+                        }
+                        // Case 2: Version mismatch
+                        else if (storedVersion != appVersion)
+                        {
+                            // Update to current version
+                            string newValue = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
+                            key.SetValue("SpotifyPreventLock", newValue);
+                        }
+                    }
+                }
             }
+            catch { /* Silent failure */ }
         }
 
         private void ShowTimerDialog()
@@ -278,7 +351,7 @@ namespace SpotifyPreventLock
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 settings.CheckInterval = (int)numericBox.Value;
-                trayIcon.Text = $"Spotify Prevent Lock {AppVersion}\nCheck Interval: {settings.CheckInterval}ms";
+                trayIcon.Text = $"Spotify Prevent Lock {appVersion}\nCheck Interval: {settings.CheckInterval}ms";
                 SaveSettings();
             }
         }
@@ -357,10 +430,55 @@ namespace SpotifyPreventLock
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             
+            // Clean up old registry entries before starting
+            CleanupOldRegistryEntries();
+            
             // Wait for system tray to initialize
             Thread.Sleep(3000);
             
             Application.Run(new PreventLockApp());
+        }
+
+        private static void CleanupOldRegistryEntries()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key == null) return;
+
+                // Get all values that look like our app
+                var values = key.GetValueNames()
+                    .Where(name => name.StartsWith("SpotifyPreventLock"))
+                    .ToList();
+
+                string currentExe = Path.GetFileName(Application.ExecutablePath);
+
+                // Clean up invalid entries
+                foreach (var valueName in values)
+                {
+                    if (key.GetValue(valueName) is string valueData)
+                    {
+                        string[] parts = valueData.Split('|');
+                        if (parts.Length > 0)
+                        {
+                            string storedPath = parts[0].Trim('"');
+                            
+                            // Delete if:
+                            // 1. It's not the current EXE path, OR
+                            // 2. It's an old format entry
+                            if ((!File.Exists(storedPath) || 
+                                !Path.GetFileName(storedPath).Equals(currentExe, StringComparison.OrdinalIgnoreCase)) &&
+                                valueName != "SpotifyPreventLock")
+                            {
+                                key.DeleteValue(valueName, false);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { /* Silent failure is okay */ }
         }
     }
 }
