@@ -143,8 +143,9 @@ namespace SpotifyPreventLock
         {
             var menu = new ContextMenuStrip();
 
-            var timerItem = new ToolStripMenuItem("Timer");
-            timerItem.DropDownItems.Add("Set Check Interval...", null, (s, e) => ShowTimerDialog());
+            // Changed from dropdown to direct menu item
+            var timerItem = new ToolStripMenuItem("Set Check Interval...");
+            timerItem.Click += (s, e) => ShowTimerDialog();
             menu.Items.Add(timerItem);
 
             var startupItem = new ToolStripMenuItem("Start with Windows");
@@ -237,7 +238,7 @@ namespace SpotifyPreventLock
 
             var infoLabel = new Label()
             {
-                Text = "Adjust how often the app checks for Spotify activity(100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
+                Text = "Delay for checking Spotify activity (100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
                 Top = 20,
                 Left = 20,
                 Width = 260,
