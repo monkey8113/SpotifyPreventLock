@@ -37,7 +37,7 @@ namespace SpotifyPreventLock
         private readonly AppSettings settings;
         private readonly string settingsPath;
         private readonly string settingsDirectory;
-        private const string AppVersion = "v1.0.0";
+        private const string AppVersion = "v1.1.0";
         private readonly Font versionFont;
 
         public PreventLockApp()
@@ -237,7 +237,7 @@ namespace SpotifyPreventLock
 
             var infoLabel = new Label()
             {
-                Text = "Adjust how often the app checks for Spotify activity\n(100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
+                Text = "Adjust how often the app checks for Spotify activity(100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
                 Top = 20,
                 Left = 20,
                 Width = 260,
@@ -247,7 +247,7 @@ namespace SpotifyPreventLock
             var numericBox = new NumericUpDown()
             {
                 Minimum = 100,
-                Maximum = 10000,
+                Maximum = 100000,
                 Value = settings.CheckInterval,
                 Width = 80,
                 Top = 70,
@@ -257,7 +257,7 @@ namespace SpotifyPreventLock
 
             var label = new Label()
             {
-                Text = "Time (ms):",
+                Text = "Time(ms):",
                 Top = 73,
                 Left = 40,
                 Width = 60
