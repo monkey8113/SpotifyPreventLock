@@ -7,7 +7,6 @@ using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Win32;
-using System.Security.Principal;
 
 namespace SpotifyPreventLock
 {
@@ -160,6 +159,7 @@ namespace SpotifyPreventLock
             
             var startupItem = new ToolStripMenuItem("Start with Windows");
             startupItem.Click += (s, e) => ToggleStartup();
+            UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
             
             var versionItem = new ToolStripMenuItem(AppVersion)
@@ -172,7 +172,6 @@ namespace SpotifyPreventLock
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => OnExit());
             
-            UpdateStartupMenuItem(); // Initialize the menu item state
             return menu;
         }
 
@@ -180,40 +179,49 @@ namespace SpotifyPreventLock
         {
             try
             {
-                if (IsInStartup())
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key != null)
                 {
-                    RemoveStartupTask();
-                }
-                else
-                {
-                    if (!IsUserAdministrator())
+                    if (IsInStartup())
                     {
-                        if (MessageBox.Show("This requires administrator permissions. Elevate now?", 
-                            "Permission Needed", MessageBoxButtons.YesNo) == DialogResult.Yes)
-                        {
-                            RestartAsAdmin();
-                            return;
-                        }
-                        return;
+                        key.DeleteValue("SpotifyPreventLock", false);
                     }
-                    CreateStartupTask();
+                    else
+                    {
+                        // Modified to use explorer.exe as parent process
+                        key.SetValue("SpotifyPreventLock", 
+                            $"explorer.exe \"{Application.ExecutablePath}\"");
+                    }
+                    
+                    if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
+                    {
+                        UpdateStartupMenuItem(menuItem);
+                    }
                 }
-                UpdateStartupMenuItem();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error toggling startup: {ex.Message}");
-                MessageBox.Show($"Failed to configure startup: {ex.Message}");
+                MessageBox.Show("Failed to update startup settings. Please try again.",
+                              "Startup Error",
+                              MessageBoxButtons.OK,
+                              MessageBoxIcon.Warning);
             }
         }
 
-        private void UpdateStartupMenuItem()
+        private void UpdateStartupMenuItem(ToolStripMenuItem item)
         {
-            if (trayIcon.ContextMenuStrip?.Items[1] is ToolStripMenuItem menuItem)
+            try
             {
                 bool isEnabled = IsInStartup();
-                menuItem.Checked = isEnabled;
-                menuItem.Text = isEnabled ? "✓ Start with Windows" : "Start with Windows";
+                item.Checked = isEnabled;
+                item.Text = isEnabled ? "✓ Start with Windows" : "Start with Windows";
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error updating menu item: {ex.Message}");
             }
         }
 
@@ -221,105 +229,14 @@ namespace SpotifyPreventLock
         {
             try
             {
-                var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "schtasks",
-                        Arguments = "/query /tn \"SpotifyPreventLock\"",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true
-                    }
-                };
-                process.Start();
-                string output = process.StandardOutput.ReadToEnd();
-                return output.Contains("SpotifyPreventLock");
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
+                return key?.GetValue("SpotifyPreventLock") != null;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"Error checking startup: {ex.Message}");
                 return false;
-            }
-        }
-
-        private void CreateStartupTask()
-        {
-            try
-            {
-                string arguments = $"/create /tn \"SpotifyPreventLock\" /tr \"\\\"{Application.ExecutablePath}\\\"\" /sc onlogon /rl highest /delay 0000:05 /f";
-                
-                var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "schtasks",
-                        Arguments = arguments,
-                        Verb = IsUserAdministrator() ? "runas" : "",
-                        UseShellExecute = true,
-                        CreateNoWindow = true
-                    }
-                };
-                process.Start();
-                process.WaitForExit();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error creating task: {ex.Message}");
-                throw;
-            }
-        }
-
-        private void RemoveStartupTask()
-        {
-            try
-            {
-                var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "schtasks",
-                        Arguments = "/delete /tn \"SpotifyPreventLock\" /f",
-                        Verb = IsUserAdministrator() ? "runas" : "",
-                        UseShellExecute = true,
-                        CreateNoWindow = true
-                    }
-                };
-                process.Start();
-                process.WaitForExit();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error removing task: {ex.Message}");
-                throw;
-            }
-        }
-
-        private bool IsUserAdministrator()
-        {
-            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
-            {
-                WindowsPrincipal principal = new WindowsPrincipal(identity);
-                return principal.IsInRole(WindowsBuiltInRole.Administrator);
-            }
-        }
-
-        private void RestartAsAdmin()
-        {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = Application.ExecutablePath,
-                UseShellExecute = true,
-                Verb = "runas"
-            };
-
-            try
-            {
-                Process.Start(startInfo);
-                Application.Exit();
-            }
-            catch
-            {
-                MessageBox.Show("Failed to restart with admin rights");
             }
         }
 
