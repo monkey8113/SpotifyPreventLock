@@ -6,6 +6,7 @@ using System.Threading;
 using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Reflection;
 
 namespace SpotifyPreventLock
 {
@@ -41,10 +42,13 @@ namespace SpotifyPreventLock
         private readonly string settingsDirectory;
         private const string AppVersion = "v1.0.0";
         private readonly Font versionFont;
+        private readonly string appDirectory;
 
         public PreventLockApp()
         {
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
+
+            appDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
 
             settingsDirectory = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -106,9 +110,10 @@ namespace SpotifyPreventLock
             try
             {
                 string iconFile = isPlaying ? "app.ico" : "appoff.ico";
-                if (File.Exists(iconFile))
+                string fullPath = Path.Combine(appDirectory, iconFile);
+                if (File.Exists(fullPath))
                 {
-                    using var stream = File.OpenRead(iconFile);
+                    using var stream = File.OpenRead(fullPath);
                     return new Icon(stream);
                 }
             }
@@ -346,7 +351,7 @@ namespace SpotifyPreventLock
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Thread.Sleep(3000);
+            Thread.Sleep(3000); // Allow system to fully load tray area after login
             Application.Run(new PreventLockApp());
         }
     }
