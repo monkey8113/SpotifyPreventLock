@@ -177,7 +177,7 @@ namespace SpotifyPreventLock
             try
             {
                 string startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                string exePath = Application.ExecutablePath;
+                string exePath = Process.GetCurrentProcess().MainModule?.FileName!;
                 string shortcutPath = Path.Combine(startupFolder, Path.GetFileName(exePath));
 
                 if (File.Exists(shortcutPath))
