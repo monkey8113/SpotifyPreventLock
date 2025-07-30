@@ -2,6 +2,15 @@
 
 A lightweight Windows utility that keeps your PC awake when Spotify is playing music.
 
+## Why This Program Exists ⚡
+Windows 11 removed a useful feature from Windows 10 that automatically prevented your screen from sleeping when media was playing in Spotify and other applications. This program restores that functionality specifically for Spotify users who:
+
+- Want to keep their screen awake while listening to music
+- Are frustrated by their PC locking during playback
+- Don't want to constantly move their mouse or change system-wide power settings
+- Need a lightweight solution that "just works"
+- Need their PC to lock/sleep normally when songs is not playing
+
 ## Features ✨
 - 🚫 Prevents PC from sleeping during Spotify playback
 - 🖥️ Stops screen from turning off automatically
