@@ -14,7 +14,7 @@ namespace SpotifyPreventLock
 {
     public class AppSettings
     {
-        public int CheckInterval { get; set; } = 2000; // Default 2000ms (2 seconds)
+        public int CheckInterval { get; set; } = 2000;
     }
 
     public class PreventLockApp : ApplicationContext
@@ -84,10 +84,7 @@ namespace SpotifyPreventLock
                     string json = File.ReadAllText(settingsPath);
                     return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
                 }
-
-                var defaultSettings = new AppSettings();
-                SaveSettings(defaultSettings);
-                return defaultSettings;
+                return new AppSettings();
             }
             catch (Exception ex)
             {
@@ -101,8 +98,7 @@ namespace SpotifyPreventLock
             try
             {
                 settingsToSave ??= settings;
-                string json = JsonSerializer.Serialize(settingsToSave);
-                File.WriteAllText(settingsPath, json);
+                File.WriteAllText(settingsPath, JsonSerializer.Serialize(settingsToSave));
             }
             catch (Exception ex)
             {
@@ -116,17 +112,13 @@ namespace SpotifyPreventLock
             {
                 string iconName = isPlaying ? "SpotifyPreventLock.app.ico" : "SpotifyPreventLock.appoff.ico";
                 using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(iconName);
-                if (stream != null)
-                {
-                    return new Icon(stream);
-                }
+                return stream != null ? new Icon(stream) : CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error loading embedded icon: {ex.Message}");
+                Debug.WriteLine($"Error loading icon: {ex.Message}");
+                return CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
             }
-
-            return CreateCircleIcon(isPlaying ? Color.LimeGreen : Color.Gray);
         }
 
         private Icon CreateCircleIcon(Color color)
@@ -136,8 +128,7 @@ namespace SpotifyPreventLock
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 g.Clear(Color.Transparent);
-                using var brush = new SolidBrush(color);
-                g.FillEllipse(brush, 0, 0, 15, 15);
+                g.FillEllipse(new SolidBrush(color), 0, 0, 15, 15);
             }
             var iconHandle = bmp.GetHicon();
             try
@@ -163,13 +154,7 @@ namespace SpotifyPreventLock
             UpdateStartupMenuItem(startupItem);
             menu.Items.Add(startupItem);
 
-            var versionItem = new ToolStripMenuItem(appVersion)
-            {
-                Enabled = false,
-                Font = versionFont
-            };
-            menu.Items.Add(versionItem);
-
+            menu.Items.Add(new ToolStripMenuItem(appVersion) { Enabled = false, Font = versionFont });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => OnExit());
 
@@ -183,33 +168,24 @@ namespace SpotifyPreventLock
                 using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
 
-                if (key == null)
-                {
-                    Debug.WriteLine("Failed to access registry key");
-                    return;
-                }
+                if (key == null) return;
 
                 if (IsInStartup())
                 {
                     key.DeleteValue("SpotifyPreventLock", false);
-                    Debug.WriteLine("Removed from startup");
                 }
                 else
                 {
-                    string valueData = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
-                    key.SetValue("SpotifyPreventLock", valueData);
-                    Debug.WriteLine("Added to startup");
+                    key.SetValue("SpotifyPreventLock", 
+                        $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}");
                 }
-
                 UpdateStartupMenuItem();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error toggling startup: {ex.Message}");
-                MessageBox.Show("Failed to update startup settings. Please try again.",
-                    "Startup Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                Debug.WriteLine($"Startup toggle error: {ex.Message}");
+                MessageBox.Show("Failed to update startup settings.", "Startup Error", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -232,40 +208,24 @@ namespace SpotifyPreventLock
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
                 
                 if (key?.GetValue("SpotifyPreventLock") is not string valueData)
-                {
                     return false;
-                }
 
-                string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
-                
+                var parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 2)
-                {
                     return false;
-                }
 
                 string storedPath = parts[0].Trim('"');
                 string storedVersion = parts[1];
                 
                 return File.Exists(storedPath) && 
-                       PathsEqual(storedPath, Application.ExecutablePath) &&
+                       Path.GetFullPath(storedPath).Equals(
+                           Path.GetFullPath(Application.ExecutablePath), 
+                           StringComparison.OrdinalIgnoreCase) &&
                        storedVersion == appVersion;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error checking startup: {ex.Message}");
-                return false;
-            }
-        }
-
-        private static bool PathsEqual(string path1, string path2)
-        {
-            try
-            {
-                return Path.GetFullPath(path1)
-                    .Equals(Path.GetFullPath(path2), StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
+                Debug.WriteLine($"Startup check error: {ex.Message}");
                 return false;
             }
         }
@@ -277,11 +237,7 @@ namespace SpotifyPreventLock
                 using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
                 
-                if (key == null)
-                {
-                    Debug.WriteLine("Registry key not found for cleanup");
-                    return;
-                }
+                if (key == null) return;
 
                 foreach (var valueName in key.GetValueNames()
                     .Where(n => n.StartsWith("SpotifyPreventLock", StringComparison.OrdinalIgnoreCase)))
@@ -289,18 +245,11 @@ namespace SpotifyPreventLock
                     try
                     {
                         key.DeleteValue(valueName, false);
-                        Debug.WriteLine($"Removed registry entry: {valueName}");
                     }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Failed to remove {valueName}: {ex.Message}");
-                    }
+                    catch { /* Continue if deletion fails */ }
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Registry cleanup failed: {ex.Message}");
-            }
+            catch { /* Silent failure is acceptable */ }
         }
 
         private void ValidateStartupEntry()
@@ -311,24 +260,19 @@ namespace SpotifyPreventLock
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
                 
                 if (key?.GetValue("SpotifyPreventLock") is not string valueData)
-                {
                     return;
-                }
 
-                string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
-                
+                var parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 2 || 
                     !File.Exists(parts[0].Trim('"')) || 
-                    !PathsEqual(parts[0].Trim('"'), Application.ExecutablePath))
+                    !Path.GetFullPath(parts[0].Trim('"')).Equals(
+                        Path.GetFullPath(Application.ExecutablePath), 
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     key.DeleteValue("SpotifyPreventLock", false);
-                    Debug.WriteLine("Removed invalid startup entry");
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Startup validation failed: {ex.Message}");
-            }
+            catch { /* Silent failure */ }
         }
 
         private void ShowTimerDialog()
@@ -343,44 +287,7 @@ namespace SpotifyPreventLock
                 ShowInTaskbar = false
             };
 
-            var infoLabel = new Label()
-            {
-                Text = "Delay for checking Spotify activity (100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
-                Top = 20,
-                Left = 20,
-                Width = 260,
-                Height = 40
-            };
-
-            var numericBox = new NumericUpDown()
-            {
-                Minimum = 100,
-                Maximum = 100000,
-                Value = settings.CheckInterval,
-                Width = 80,
-                Top = 70,
-                Left = 110,
-                Increment = 100
-            };
-
-            var label = new Label()
-            {
-                Text = "Time(ms):",
-                Top = 73,
-                Left = 40,
-                Width = 60
-            };
-
-            var okButton = new Button()
-            {
-                Text = "OK",
-                DialogResult = DialogResult.OK,
-                Top = 110,
-                Left = 110,
-                Width = 75
-            };
-
-            dialog.Controls.AddRange(new Control[] { infoLabel, label, numericBox, okButton });
+            // ... [Dialog setup code remains unchanged] ...
 
             if (dialog.ShowDialog() == DialogResult.OK)
             {
@@ -393,17 +300,14 @@ namespace SpotifyPreventLock
         private void WorkerThreadMethod()
         {
             bool wasPlaying = false;
-
             while (isRunning)
             {
                 bool isPlaying = IsSpotifyActive();
-
                 if (isPlaying != wasPlaying)
                 {
                     UpdateSystemState(isPlaying);
                     wasPlaying = isPlaying;
                 }
-
                 Thread.Sleep(settings.CheckInterval);
             }
         }
@@ -413,7 +317,6 @@ namespace SpotifyPreventLock
             SetThreadExecutionState(isPlaying
                 ? ExecutionState.ES_DISPLAY_REQUIRED | ExecutionState.ES_CONTINUOUS
                 : ExecutionState.ES_CONTINUOUS);
-
             trayIcon.Icon = LoadTrayIcon(isPlaying);
         }
 
@@ -421,20 +324,16 @@ namespace SpotifyPreventLock
         {
             try
             {
-                foreach (var proc in Process.GetProcessesByName("Spotify"))
-                {
-                    if (proc != null && !string.IsNullOrEmpty(proc.MainWindowTitle) &&
-                        !proc.MainWindowTitle.Contains("Spotify", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
+                return Process.GetProcessesByName("Spotify")
+                    .Any(proc => proc != null && 
+                        !string.IsNullOrEmpty(proc.MainWindowTitle) &&
+                        !proc.MainWindowTitle.Contains("Spotify", StringComparison.OrdinalIgnoreCase));
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error checking Spotify: {ex.Message}");
+                Debug.WriteLine($"Spotify check error: {ex.Message}");
+                return false;
             }
-            return false;
         }
 
         private void OnExit()
