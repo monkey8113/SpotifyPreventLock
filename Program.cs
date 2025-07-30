@@ -42,8 +42,8 @@ namespace SpotifyPreventLock
 
         public PreventLockApp()
         {
-            // Get version from assembly (which comes from .csproj)
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            // Safe version initialization with null checks
+            var version = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
             appVersion = $"v{version.Major}.{version.Minor}.{version.Build}";
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
 
