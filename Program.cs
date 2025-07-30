@@ -143,7 +143,6 @@ namespace SpotifyPreventLock
         {
             var menu = new ContextMenuStrip();
 
-            // Changed from dropdown to direct menu item
             var timerItem = new ToolStripMenuItem("Set Check Interval...");
             timerItem.Click += (s, e) => ShowTimerDialog();
             menu.Items.Add(timerItem);
@@ -182,7 +181,7 @@ namespace SpotifyPreventLock
                     else
                     {
                         key.SetValue("SpotifyPreventLock", 
-                            $"explorer.exe \"{Application.ExecutablePath}\"");
+                            $"\"{Application.ExecutablePath}\"");
                     }
 
                     UpdateStartupMenuItem();
