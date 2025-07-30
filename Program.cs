@@ -183,20 +183,25 @@ namespace SpotifyPreventLock
                 using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
 
-                if (key != null)
+                if (key == null)
                 {
-                    if (IsInStartup())
-                    {
-                        key.DeleteValue("SpotifyPreventLock", false);
-                    }
-                    else
-                    {
-                        string valueData = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
-                        key.SetValue("SpotifyPreventLock", valueData);
-                    }
-
-                    UpdateStartupMenuItem();
+                    Debug.WriteLine("Failed to access registry key");
+                    return;
                 }
+
+                if (IsInStartup())
+                {
+                    key.DeleteValue("SpotifyPreventLock", false);
+                    Debug.WriteLine("Removed from startup");
+                }
+                else
+                {
+                    string valueData = $"\"{Application.ExecutablePath}\"|{appVersion}|{DateTime.Now.Ticks}";
+                    key.SetValue("SpotifyPreventLock", valueData);
+                    Debug.WriteLine("Added to startup");
+                }
+
+                UpdateStartupMenuItem();
             }
             catch (Exception ex)
             {
@@ -226,21 +231,24 @@ namespace SpotifyPreventLock
                 using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", false);
                 
-                if (key?.GetValue("SpotifyPreventLock") is string valueData)
+                if (key?.GetValue("SpotifyPreventLock") is not string valueData)
                 {
-                    string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
-                    
-                    if (parts.Length >= 2)
-                    {
-                        string storedPath = parts[0].Trim('"');
-                        string storedVersion = parts[1];
-                        
-                        return File.Exists(storedPath) && 
-                               PathsEqual(storedPath, Application.ExecutablePath) &&
-                               storedVersion == appVersion;
-                    }
+                    return false;
                 }
-                return false;
+
+                string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
+                
+                if (parts.Length < 2)
+                {
+                    return false;
+                }
+
+                string storedPath = parts[0].Trim('"');
+                string storedVersion = parts[1];
+                
+                return File.Exists(storedPath) && 
+                       PathsEqual(storedPath, Application.ExecutablePath) &&
+                       storedVersion == appVersion;
             }
             catch (Exception ex)
             {
@@ -251,8 +259,15 @@ namespace SpotifyPreventLock
 
         private static bool PathsEqual(string path1, string path2)
         {
-            return Path.GetFullPath(path1)
-                .Equals(Path.GetFullPath(path2), StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                return Path.GetFullPath(path1)
+                    .Equals(Path.GetFullPath(path2), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void CleanupRegistryEntries()
@@ -262,7 +277,11 @@ namespace SpotifyPreventLock
                 using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
                 
-                if (key == null) return;
+                if (key == null)
+                {
+                    Debug.WriteLine("Registry key not found for cleanup");
+                    return;
+                }
 
                 foreach (var valueName in key.GetValueNames()
                     .Where(n => n.StartsWith("SpotifyPreventLock", StringComparison.OrdinalIgnoreCase)))
@@ -270,11 +289,18 @@ namespace SpotifyPreventLock
                     try
                     {
                         key.DeleteValue(valueName, false);
+                        Debug.WriteLine($"Removed registry entry: {valueName}");
                     }
-                    catch { /* Continue if we can't delete one */ }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to remove {valueName}: {ex.Message}");
+                    }
                 }
             }
-            catch { /* Silent failure is okay */ }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Registry cleanup failed: {ex.Message}");
+            }
         }
 
         private void ValidateStartupEntry()
@@ -284,19 +310,25 @@ namespace SpotifyPreventLock
                 using var key = Registry.CurrentUser.OpenSubKey(
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
                 
-                if (key?.GetValue("SpotifyPreventLock") is string valueData)
+                if (key?.GetValue("SpotifyPreventLock") is not string valueData)
                 {
-                    string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
-                    
-                    if (parts.Length < 2 || 
-                        !File.Exists(parts[0].Trim('"')) || 
-                        !PathsEqual(parts[0].Trim('"'), Application.ExecutablePath))
-                    {
-                        key.DeleteValue("SpotifyPreventLock", false);
-                    }
+                    return;
+                }
+
+                string[] parts = valueData.Split('|', StringSplitOptions.RemoveEmptyEntries);
+                
+                if (parts.Length < 2 || 
+                    !File.Exists(parts[0].Trim('"')) || 
+                    !PathsEqual(parts[0].Trim('"'), Application.ExecutablePath))
+                {
+                    key.DeleteValue("SpotifyPreventLock", false);
+                    Debug.WriteLine("Removed invalid startup entry");
                 }
             }
-            catch { /* Silent failure */ }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Startup validation failed: {ex.Message}");
+            }
         }
 
         private void ShowTimerDialog()
