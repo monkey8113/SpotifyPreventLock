@@ -287,11 +287,51 @@ namespace SpotifyPreventLock
                 ShowInTaskbar = false
             };
 
-            // ... [Dialog setup code remains unchanged] ...
+            var infoLabel = new Label()
+            {
+                Text = "Delay for checking Spotify activity (100ms = 0.1s, 1000ms = 1s, 2000ms = 2s)",
+                Top = 20,
+                Left = 20,
+                Width = 260,
+                Height = 40
+            };
+
+            var numericUpDown = new NumericUpDown()
+            {
+                Minimum = 100,
+                Maximum = 100000,
+                Value = settings.CheckInterval,
+                Width = 80,
+                Top = 70,
+                Left = 110,
+                Increment = 100
+            };
+
+            var label = new Label()
+            {
+                Text = "Time(ms):",
+                Top = 73,
+                Left = 40,
+                Width = 60
+            };
+
+            var okButton = new Button()
+            {
+                Text = "OK",
+                DialogResult = DialogResult.OK,
+                Top = 110,
+                Left = 110,
+                Width = 75
+            };
+
+            dialog.Controls.Add(infoLabel);
+            dialog.Controls.Add(label);
+            dialog.Controls.Add(numericUpDown);
+            dialog.Controls.Add(okButton);
 
             if (dialog.ShowDialog() == DialogResult.OK)
             {
-                settings.CheckInterval = (int)numericBox.Value;
+                settings.CheckInterval = (int)numericUpDown.Value;
                 trayIcon.Text = $"Spotify Prevent Lock {appVersion}\nCheck Interval: {settings.CheckInterval}ms";
                 SaveSettings();
             }
