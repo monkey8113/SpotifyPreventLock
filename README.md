@@ -66,7 +66,7 @@ Right-click the tray icon to:
 ✅ Yes! `Win + L` will always work.
 
 ### How often does it check Spotify?
-🔧 Default: Every 5 minutes (fully adjustable in settings)
+🔧 Default: Every 2 seconds (fully adjustable in settings)
 
 ### Does this use my internet?
 🌐 No internet connection needed - works 100% offline.
