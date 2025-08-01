@@ -411,18 +411,19 @@ namespace SpotifyPreventLock
                         }
                         else if (versionComparison > 0) // Newer version running
                         {
-                            MessageBox.Show($"A newer version (v{runningVersion.ToString(3)}) is already running",
-                                "Information",
+                            MessageBox.Show($"A newer version (v{runningVersion.ToString(3)}) is already running\n\n" +
+                                          "Please close this version and use the newer version.",
+                                "New Version Detected",
                                 MessageBoxButtons.OK,
                                 MessageBoxIcon.Information);
                             return;
                         }
-                        else // Older version running - offer upgrade
+                        else // Older version running
                         {
                             var result = MessageBox.Show($"An older version is running (v{runningVersion.ToString(3)}).\n\n" +
                                                       $"Current version: v{currentVersion.ToString(3)}\n\n" +
-                                                      "Would you like to upgrade to the new version?",
-                                                      "New Version Available",
+                                                      "Would you like to close the old version and upgrade now?",
+                                                      "Update Available",
                                                       MessageBoxButtons.YesNo,
                                                       MessageBoxIcon.Question);
                             
@@ -437,30 +438,29 @@ namespace SpotifyPreventLock
                                     }
                                     
                                     // Wait for process to exit
-                                    if (!process.WaitForExit(5000))
+                                    if (!process.WaitForExit(3000))
                                     {
-                                        MessageBox.Show("The previous version didn't close properly.\nPlease close it manually and try again.",
-                                            "Upgrade Warning",
+                                        MessageBox.Show("Could not close the previous version.\nPlease close it manually and run the new version again.",
+                                            "Update Warning",
                                             MessageBoxButtons.OK,
                                             MessageBoxIcon.Warning);
                                         return;
                                     }
                                     
                                     // Brief pause before launching new version
-                                    Thread.Sleep(300);
+                                    Thread.Sleep(500);
                                     
                                     // Launch new version automatically
                                     Process.Start(new ProcessStartInfo
                                     {
                                         FileName = Application.ExecutablePath,
-                                        UseShellExecute = true,
-                                        Verb = "open"
+                                        UseShellExecute = true
                                     });
                                 }
                                 catch (Exception ex)
                                 {
-                                    MessageBox.Show($"Failed to upgrade: {ex.Message}\n\nPlease close the old version manually and try again.",
-                                        "Upgrade Error",
+                                    MessageBox.Show($"Failed to upgrade: {ex.Message}\n\nPlease close the old version manually and run the new version again.",
+                                        "Update Error",
                                         MessageBoxButtons.OK,
                                         MessageBoxIcon.Error);
                                 }
