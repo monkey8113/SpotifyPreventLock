@@ -9,9 +9,7 @@
     
     <!-- Version Control - Update these for each release -->
     <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
-    <InformationalVersion>1.1.0</InformationalVersion>
+    <VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
     
     <!-- Application Settings -->
     <ApplicationIcon>app.ico</ApplicationIcon>
