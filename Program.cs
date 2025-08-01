@@ -56,6 +56,9 @@ namespace SpotifyPreventLock
             settings = LoadSettings();
             isRunning = true;
 
+            // Validate and fix startup path if needed (NEW)
+            ValidateAndFixStartupPath();
+
             trayIcon = new NotifyIcon()
             {
                 Icon = LoadTrayIcon(false),
@@ -67,6 +70,29 @@ namespace SpotifyPreventLock
             new Thread(WorkerThreadMethod) { IsBackground = true }.Start();
         }
 
+        // NEW METHOD: Fixes startup path if executable was moved
+        private void ValidateAndFixStartupPath()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                
+                if (key?.GetValue("SpotifyPreventLock") is string currentValue)
+                {
+                    string currentPath = currentValue.Trim('"');
+                    string actualPath = Application.ExecutablePath;
+                    
+                    if (!currentPath.Equals(actualPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        key.SetValue("SpotifyPreventLock", $"\"{actualPath}\"");
+                    }
+                }
+            }
+            catch { /* Silent failure is acceptable */ }
+        }
+
+        /* ALL OTHER METHODS REMAIN EXACTLY THE SAME AS YOUR ORIGINAL CODE */
         private AppSettings LoadSettings()
         {
             try
