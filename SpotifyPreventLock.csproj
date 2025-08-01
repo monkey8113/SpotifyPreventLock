@@ -8,7 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     
     <!-- Version Control - Update these for each release -->
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <VersionSuffix Condition="'$(Configuration)' == 'Debug'">dev</VersionSuffix>
     
     <!-- Application Settings -->
