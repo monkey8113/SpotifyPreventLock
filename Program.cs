@@ -42,7 +42,6 @@ namespace SpotifyPreventLock
 
         public PreventLockApp()
         {
-            // Safe version initialization with null checks
             var version = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
             appVersion = $"v{version.Major}.{version.Minor}.{version.Build}";
             versionFont = new Font("Segoe UI", 8.25f, FontStyle.Italic);
@@ -56,7 +55,6 @@ namespace SpotifyPreventLock
             settings = LoadSettings();
             isRunning = true;
 
-            // Validate and fix startup path if needed
             ValidateAndFixStartupPath();
 
             trayIcon = new NotifyIcon()
@@ -401,21 +399,29 @@ namespace SpotifyPreventLock
                         if (string.IsNullOrEmpty(processPath)) continue;
                         
                         var runningVersion = AssemblyName.GetAssemblyName(processPath).Version ?? new Version(1, 0, 0);
-                        
-                        if (runningVersion > currentVersion)
+                        int versionComparison = runningVersion.CompareTo(currentVersion);
+
+                        if (versionComparison == 0) // Same version
                         {
-                            MessageBox.Show($"A newer version (v{runningVersion.ToString(3)}) is already running.\n\n" +
-                                            $"Please close this version (v{currentVersion.ToString(3)}) and use the newer version.",
-                                            "Newer Version Running",
-                                            MessageBoxButtons.OK,
-                                            MessageBoxIcon.Information);
+                            MessageBox.Show("Spotify Prevent Lock is already running",
+                                "Information",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
                             return;
                         }
-                        else if (runningVersion < currentVersion)
+                        else if (versionComparison > 0) // Newer version running
                         {
-                            var result = MessageBox.Show($"An older version (v{runningVersion.ToString(3)}) is running.\n\n" +
+                            MessageBox.Show($"A newer version (v{runningVersion.ToString(3)}) is already running",
+                                "Information",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                            return;
+                        }
+                        else // Older version running - offer upgrade
+                        {
+                            var result = MessageBox.Show($"An older version is running (v{runningVersion.ToString(3)}).\n\n" +
                                                       $"Current version: v{currentVersion.ToString(3)}\n\n" +
-                                                      "Would you like to close the old version and launch this new version?",
+                                                      "Would you like to upgrade to the new version?",
                                                       "New Version Available",
                                                       MessageBoxButtons.YesNo,
                                                       MessageBoxIcon.Question);
@@ -424,23 +430,41 @@ namespace SpotifyPreventLock
                             {
                                 try
                                 {
-                                    process.Kill();
-                                    process.WaitForExit(3000); // Wait up to 3 seconds
-                                    Thread.Sleep(500); // Small delay before restarting
-                                    Process.Start(Application.ExecutablePath);
+                                    // Try to close gracefully first
+                                    if (!process.CloseMainWindow())
+                                    {
+                                        process.Kill();
+                                    }
+                                    
+                                    // Wait for process to exit
+                                    if (!process.WaitForExit(5000))
+                                    {
+                                        MessageBox.Show("The previous version didn't close properly.\nPlease close it manually and try again.",
+                                            "Upgrade Warning",
+                                            MessageBoxButtons.OK,
+                                            MessageBoxIcon.Warning);
+                                        return;
+                                    }
+                                    
+                                    // Brief pause before launching new version
+                                    Thread.Sleep(300);
+                                    
+                                    // Launch new version automatically
+                                    Process.Start(new ProcessStartInfo
+                                    {
+                                        FileName = Application.ExecutablePath,
+                                        UseShellExecute = true,
+                                        Verb = "open"
+                                    });
                                 }
-                                catch
+                                catch (Exception ex)
                                 {
-                                    MessageBox.Show("Failed to close the previous version.", 
-                                        "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                    MessageBox.Show($"Failed to upgrade: {ex.Message}\n\nPlease close the old version manually and try again.",
+                                        "Upgrade Error",
+                                        MessageBoxButtons.OK,
+                                        MessageBoxIcon.Error);
                                 }
                             }
-                            return;
-                        }
-                        else
-                        {
-                            MessageBox.Show("Spotify Prevent Lock is already running.", 
-                                "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
                             return;
                         }
                     }
