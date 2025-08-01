@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Diagnostics;
 using System.Reflection;
 using Microsoft.Win32;
+using System.Linq;
 
 namespace SpotifyPreventLock
 {
@@ -375,24 +376,25 @@ namespace SpotifyPreventLock
 
     static class Program
     {
-        private static Mutex? _mutex;
+        private static Mutex? _appMutex;
+        private static readonly Version CurrentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
         private const string AppName = "Spotify Prevent Lock";
 
         [STAThread]
         static void Main()
         {
-            const string mutexName = "Global\\SpotifyPreventLock";
-            bool createdNew;
-            _mutex = new Mutex(true, mutexName, out createdNew);
-
-            if (!createdNew)
-            {
-                ShowRunningInstanceWarning();
-                return;
-            }
+            const string mutexName = @"Global\SpotifyPreventLock_{B5FE0EF1-6D4B-4A9B-9B9D-8A1D8B7C8D9F}";
 
             try
             {
+                _appMutex = new Mutex(true, mutexName, out bool isFirstInstance);
+
+                if (!isFirstInstance)
+                {
+                    HandleExistingInstance();
+                    return;
+                }
+
                 var versionCheck = CheckRunningVersions();
                 if (versionCheck != VersionCheckResult.Continue)
                 {
@@ -414,8 +416,8 @@ namespace SpotifyPreventLock
             }
             finally
             {
-                _mutex?.ReleaseMutex();
-                _mutex?.Dispose();
+                _appMutex?.ReleaseMutex();
+                _appMutex?.Dispose();
             }
         }
 
@@ -426,14 +428,103 @@ namespace SpotifyPreventLock
             Restart
         }
 
-        private static void ShowRunningInstanceWarning()
+        private static void HandleExistingInstance()
         {
-            MessageBox.Show(
-                $"{AppName} is already running.\n\n" +
-                "Please check your system tray or task manager.",
-                "Application Running",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            var existingProcesses = Process.GetProcessesByName(Process.GetCurrentProcess().ProcessName)
+                                        .Where(p => p.Id != Process.GetCurrentProcess().Id)
+                                        .ToList();
+
+            if (existingProcesses.Count == 0) return;
+
+            var existingVersion = GetRunningVersion(existingProcesses[0]);
+            int versionComparison = existingVersion.CompareTo(CurrentVersion);
+
+            if (versionComparison == 0) // Same version
+            {
+                MessageBox.Show($"{AppName} is already running.\n\n" +
+                              "Please check your system tray or task manager.",
+                    "Information",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else if (versionComparison > 0) // Newer version running
+            {
+                MessageBox.Show($"A newer version (v{existingVersion}) is already running!\n\n" +
+                              $"Please close this version (v{CurrentVersion}) and use the newer one.",
+                    "New Version Detected",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else // Older version running
+            {
+                var result = MessageBox.Show(
+                    $"An older version (v{existingVersion}) is running.\n\n" +
+                    $"Current version: v{CurrentVersion}\n\n" +
+                    "Would you like to upgrade now?",
+                    "Upgrade Available",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    try
+                    {
+                        var process = existingProcesses[0];
+                        // Try graceful shutdown first
+                        if (!process.CloseMainWindow())
+                        {
+                            process.Kill();
+                        }
+
+                        if (!process.WaitForExit(3000))
+                        {
+                            MessageBox.Show(
+                                "Could not close the previous version.\n" +
+                                "Please close it manually and run the new version again.",
+                                "Upgrade Warning",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                            return;
+                        }
+
+                        Thread.Sleep(500); // Brief pause before restart
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = Application.ExecutablePath,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(
+                            $"Upgrade failed: {ex.Message}\n\n" +
+                            "Please close the old version manually and try again.",
+                            "Upgrade Error",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
+        private static Version GetRunningVersion(Process process)
+        {
+            try
+            {
+                if (process.MainModule?.FileName is string fileName)
+                {
+                    var versionInfo = FileVersionInfo.GetVersionInfo(fileName);
+                    if (versionInfo.FileVersion != null)
+                    {
+                        return new Version(versionInfo.FileVersion);
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback if version can't be determined
+            }
+            return new Version(0, 0);
         }
 
         private static VersionCheckResult CheckRunningVersions()
@@ -454,12 +545,6 @@ namespace SpotifyPreventLock
 
                     if (comparison > 0) // Newer version running
                     {
-                        MessageBox.Show(
-                            $"A newer version (v{runningVersion}) is already running!\n\n" +
-                            $"Please close this version (v{currentVersion}) and use the newer one.",
-                            "New Version Detected",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
                         return VersionCheckResult.Exit;
                     }
                     else if (comparison < 0) // Older version running
