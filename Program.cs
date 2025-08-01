@@ -430,8 +430,8 @@ namespace SpotifyPreventLock
         {
             MessageBox.Show(
                 $"{AppName} is already running.\n\n" +
-                "If you have new version or move exe file to new location",
-				"Please exit old instance and rerun new version to update.",
+                "If you have new version or move exe file to new location" +
+		"Please exit old instance and rerun new version to update.",
                 "Application Running",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
