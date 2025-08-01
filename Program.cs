@@ -56,7 +56,7 @@ namespace SpotifyPreventLock
             settings = LoadSettings();
             isRunning = true;
 
-            // Validate and fix startup path if needed (NEW)
+            // Validate and fix startup path if needed
             ValidateAndFixStartupPath();
 
             trayIcon = new NotifyIcon()
@@ -70,7 +70,6 @@ namespace SpotifyPreventLock
             new Thread(WorkerThreadMethod) { IsBackground = true }.Start();
         }
 
-        // NEW METHOD: Fixes startup path if executable was moved
         private void ValidateAndFixStartupPath()
         {
             try
@@ -92,7 +91,6 @@ namespace SpotifyPreventLock
             catch { /* Silent failure is acceptable */ }
         }
 
-        /* ALL OTHER METHODS REMAIN EXACTLY THE SAME AS YOUR ORIGINAL CODE */
         private AppSettings LoadSettings()
         {
             try
@@ -379,16 +377,88 @@ namespace SpotifyPreventLock
 
     static class Program
     {
+        private static Mutex _mutex;
+
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            
-            // Wait for system tray to initialize
-            Thread.Sleep(3000);
-            
-            Application.Run(new PreventLockApp());
+            const string mutexName = "Global\\SpotifyPreventLock";
+            bool createdNew;
+            _mutex = new Mutex(true, mutexName, out createdNew);
+
+            if (!createdNew)
+            {
+                Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
+                Process currentProcess = Process.GetCurrentProcess();
+                
+                foreach (Process process in Process.GetProcessesByName(currentProcess.ProcessName))
+                {
+                    try
+                    {
+                        if (process.Id == currentProcess.Id) continue;
+                        
+                        string processPath = process.MainModule?.FileName;
+                        if (string.IsNullOrEmpty(processPath)) continue;
+                        
+                        Version runningVersion = AssemblyName.GetAssemblyName(processPath).Version;
+                        
+                        if (runningVersion > currentVersion)
+                        {
+                            MessageBox.Show($"A newer version (v{runningVersion.ToString(3)}) is already running.\n\n" +
+                                            $"Please close this version (v{currentVersion.ToString(3)}) and use the newer version.",
+                                            "Newer Version Running",
+                                            MessageBoxButtons.OK,
+                                            MessageBoxIcon.Information);
+                            return;
+                        }
+                        else if (runningVersion < currentVersion)
+                        {
+                            var result = MessageBox.Show($"An older version (v{runningVersion.ToString(3)}) is running.\n\n" +
+                                                      $"Current version: v{currentVersion.ToString(3)}\n\n" +
+                                                      "Would you like to close the old version and launch this new version?",
+                                                      "New Version Available",
+                                                      MessageBoxButtons.YesNo,
+                                                      MessageBoxIcon.Question);
+                            
+                            if (result == DialogResult.Yes)
+                            {
+                                try
+                                {
+                                    process.Kill();
+                                    process.WaitForExit(3000); // Wait up to 3 seconds
+                                    Thread.Sleep(500); // Small delay before restarting
+                                    Process.Start(Application.ExecutablePath);
+                                }
+                                catch
+                                {
+                                    MessageBox.Show("Failed to close the previous version.", 
+                                        "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                }
+                            }
+                            return;
+                        }
+                        else
+                        {
+                            MessageBox.Show("Spotify Prevent Lock is already running.", 
+                                "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
+                    }
+                    catch { /* Ignore processes we can't access */ }
+                }
+                return;
+            }
+
+            try
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new PreventLockApp());
+            }
+            finally
+            {
+                _mutex?.ReleaseMutex();
+            }
         }
     }
 }
