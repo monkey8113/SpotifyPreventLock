@@ -430,7 +430,7 @@ namespace SpotifyPreventLock
         {
             MessageBox.Show(
                 $"{AppName} is already running.\n\n" +
-                "Please check your system tray or task manager.",
+                "Please exit old instance and rerun new version to upgrade.",
                 "Application Running",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
