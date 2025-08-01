@@ -380,7 +380,6 @@ namespace SpotifyPreventLock
         [STAThread]
         static void Main()
         {
-            // Create application mutex to prevent multiple instances
             const string mutexName = "Global\\SpotifyPreventLock";
             _mutex = new Mutex(true, mutexName, out bool isFirstInstance);
 
@@ -433,8 +432,9 @@ namespace SpotifyPreventLock
                     string? processPath = process.MainModule?.FileName;
                     if (string.IsNullOrEmpty(processPath)) continue;
 
-                    var runningVersion = FileVersionInfo.GetVersionInfo(processPath).FileVersion != null
-                        ? new Version(FileVersionInfo.GetVersionInfo(processPath).FileVersion)
+                    var fileVersionInfo = FileVersionInfo.GetVersionInfo(processPath);
+                    var runningVersion = !string.IsNullOrEmpty(fileVersionInfo.FileVersion) 
+                        ? new Version(fileVersionInfo.FileVersion) 
                         : new Version(1, 0, 0);
 
                     int versionComparison = runningVersion.CompareTo(currentVersion);
