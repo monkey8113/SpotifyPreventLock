@@ -377,7 +377,7 @@ namespace SpotifyPreventLock
 
     static class Program
     {
-        private static Mutex _mutex;
+        private static Mutex? _mutex;
 
         [STAThread]
         static void Main()
@@ -388,19 +388,19 @@ namespace SpotifyPreventLock
 
             if (!createdNew)
             {
-                Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
-                Process currentProcess = Process.GetCurrentProcess();
+                var currentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
+                var currentProcess = Process.GetCurrentProcess();
                 
-                foreach (Process process in Process.GetProcessesByName(currentProcess.ProcessName))
+                foreach (var process in Process.GetProcessesByName(currentProcess.ProcessName))
                 {
                     try
                     {
                         if (process.Id == currentProcess.Id) continue;
                         
-                        string processPath = process.MainModule?.FileName;
+                        string? processPath = process.MainModule?.FileName;
                         if (string.IsNullOrEmpty(processPath)) continue;
                         
-                        Version runningVersion = AssemblyName.GetAssemblyName(processPath).Version;
+                        var runningVersion = AssemblyName.GetAssemblyName(processPath).Version ?? new Version(1, 0, 0);
                         
                         if (runningVersion > currentVersion)
                         {
